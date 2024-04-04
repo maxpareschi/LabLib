@@ -1,0 +1,57 @@
+{
+    "studio": {
+        "name": "Studio",
+        "code": "std"
+    },
+    "user": "admin",
+    "username": "admin",
+    "project": {
+        "name": "BUILD_TEST",
+        "code": "BLD"
+    },
+    "asset": "BLD_010_0010",
+    "hierarchy": "shots",
+    "parent": "shots",
+    "task": {
+        "name": "Compositing",
+        "type": "Compositing",
+        "short": "comp"
+    },
+    "app": "nuke",
+    "d": "23",
+    "dd": "23",
+    "ddd": "Fri",
+    "dddd": "Friday",
+    "m": "9",
+    "mm": "09",
+    "mmm": "Sep",
+    "mmmm": "September",
+    "yy": "22",
+    "yyyy": "2022",
+    "H": "11",
+    "HH": "11",
+    "h": "11",
+    "hh": "11",
+    "ht": "AM",
+    "M": "33",
+    "MM": "33",
+    "S": "35",
+    "SS": "35",
+    "family": "render",
+    "subset": "renderCompositingMain",
+    "version": 1,
+    "@version": "0001",
+    "resolution_width": 4382,
+    "resolution_height": 2310,
+    "pixel_aspect": 1,
+    "frameStartHandle": 1001,
+    "frameEndHandle": 1001,
+    "fps": 24,
+    "thumbnail": "",
+    "scope": "test scope string.",
+    "intent": {
+        "label": "WIP",
+        "value": "wip"
+    },
+    "comment": "test comment string"
+}
