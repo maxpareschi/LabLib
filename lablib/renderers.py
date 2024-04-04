@@ -10,11 +10,24 @@ from . import processors as procs
 class DefaultRenderer:
     color_transform: procs.ColorTransformProcessor = None
     repo_transform: procs.RepoTransformProcessor = None
+    source = None
+    dest = None
+    debug = False
 
-    def render_oiio(self,
-                    source: str,
-                    dest: str,
-                    debug: bool = False) -> str:
+    def compute_oiio(self,
+                     source: str = None,
+                     dest: str = None,
+                     debug: bool = False) -> str:
+        if not source:
+            if not self.source:
+                raise ValueError("Missing source file path!")
+            else:
+                source = self.source
+        if not dest:
+            if not self.source:
+                raise ValueError("Missing destination file path!")
+            else:
+                dest = self.dest
         cmd = ["oiiotool"]
         cmd.append(source)
         if self.repo_transform:
@@ -26,8 +39,17 @@ class DefaultRenderer:
         if debug:
             cmd.extend(["--debug", "-v"])
         cmd.extend(["-o", dest])
-        if debug:
-            print(f"OIIO cmd > {' '.join(cmd)}")
+        return cmd
+
+    def render_oiio(self,
+                    source: str = None,
+                    dest: str = None,
+                    debug: bool = False) -> list:
+        cmd = self.compute_oiio(
+            source=source,
+            dest=dest,
+            debug=debug
+        )
         subprocess.run(cmd)
 
     def render_repo_ffmpeg(self,
