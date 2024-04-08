@@ -135,6 +135,7 @@ class ColorTransformProcessor:
     ocio_description: str = None
     _class_search_key: str = "class"
     _AYON_DESC_KEY = "AYON_OCIO_SUBSET_INFO"
+    _ocio_config: OCIO.Config = None
 
     def add_transform(self, *args) -> None:
         arglist = []
@@ -157,9 +158,12 @@ class ColorTransformProcessor:
 
     def get_description(self, source: str = None):
         if not source:
-            source = self.temp_config_path
-        source = os.path.abspath(source)
-        config = OCIO.Config.CreateFromFile(os.path.abspath(source))
+            if not self._ocio_config:
+                raise ValueError("No config specified or already loaded to work on!")
+            else:
+                config = self._ocio_config
+        else:
+            config = OCIO.Config.CreateFromFile(os.path.abspath(source))
         desc = config.getDescription()
         return json.loads(desc.replace("'", "\""))[self._AYON_DESC_KEY]
 
@@ -193,6 +197,7 @@ class ColorTransformProcessor:
             else:
                 dest = self.temp_config_path
         config = OCIO.Config.CreateFromFile(source)
+        self._ocio_config = config
         for k, v in self.ocio_environment.items():
             config.addEnvironmentVar(k, v)
         if self.ocio_description:
