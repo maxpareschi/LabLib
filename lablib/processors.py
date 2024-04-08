@@ -132,6 +132,7 @@ class ColorTransformProcessor:
     temp_config_path: str = None
     active_views: str = None
     ocio_environment: dict = field(default_factory = lambda: dict({}))
+    ocio_description: str = None
     _class_search_key: str = "class"
 
     def add_transform(self, *args) -> None:
@@ -152,6 +153,13 @@ class ColorTransformProcessor:
                     class_name = getattr(ops, f"{obj.get(self._class_search_key).replace('OCIO', '')}Transform")
                 obj.pop(self._class_search_key)
                 self.transform_list.append(class_name(**obj))
+
+    def get_description(self, source: str = None):
+        if not source:
+            source = self.temp_config_path
+        config = OCIO.Config.CreateFromFile(source)
+        desc = config.getDescription(str(source)).replace("'", "\"")
+        return json.loads(desc)
 
     def set_active_views(self, views: str | list[str] | tuple[str]) -> None:
         if isinstance(views, str):
@@ -183,6 +191,10 @@ class ColorTransformProcessor:
             else:
                 dest = self.temp_config_path
         config = OCIO.Config.CreateFromFile(source)
+        for k, v in self.ocio_environment.items():
+            config.addEnvironmentVar(k, v)
+        if self.ocio_description:
+            config.setDescription(str(self.ocio_description))
         search_paths = []
         ocio_transforms_list = []
         view_name = f"{self.context}"
@@ -236,9 +248,6 @@ class ColorTransformProcessor:
             config.setActiveViews(
                 f"{view_name},{self.active_views}"
             )
-        for k, v in self.ocio_environment.items():
-            config.addEnvironmentVar(k, v)
-        config.setDescription(str(self.ocio_environment))
         config.validate()
         config_lines = config.serialize().splitlines()
         for i, l in enumerate(config_lines.copy()):

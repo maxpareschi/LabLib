@@ -37,11 +37,14 @@ cpr = lablib.processors.ColorTransformProcessor(
     config_path = OCIO_PATH,
     temp_config_path = OUTPUT_CONFIG,
     active_views = "sRGB, Rec.709, Log, Raw",
-    ocio_environment={
+    ocio_description={
         "parent_id": "whatever_id_here",
         "parent_asset": CONTEXT,
         "parent_subset": "effectPlateMain",
         "parent_version": "0"
+    },
+    ocio_environment={
+        "TEST_ENV": "test_env_string"
     }
 )
 cpr.add_transform(effect_data["color"])
