@@ -5,10 +5,25 @@ import os
 import math
 import json
 import copy
+import shutil
+import subprocess
 
 import PyOpenColorIO as OCIO
 
-from . import operators as ops
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
+from . import (
+    operators as ops,
+    utils
+)
+
+
+class format_dict(dict):
+    def __missing__(self, key): 
+        #return key.join("{}")
+        return ""
 
 
 @dataclass
@@ -116,6 +131,7 @@ class ColorTransformProcessor:
     config_path: str = None
     temp_config_path: str = None
     active_views: str = None
+    ocio_environment: dict = field(default_factory = lambda: dict({}))
     _class_search_key: str = "class"
 
     def add_transform(self, *args) -> None:
@@ -201,7 +217,7 @@ class ColorTransformProcessor:
             search_paths[i] = f"  - {sp}"
         group = OCIO.GroupTransform(ocio_transforms_list)
         look = OCIO.Look(
-            name = self.context,
+            name = view_name,
             processSpace = self.working_space,
             transform = group
         )
@@ -210,7 +226,7 @@ class ColorTransformProcessor:
             "ACES",
             view_name,
             self.working_space,
-            looks = self.context
+            looks = view_name
         )
         if not self.active_views:
             config.setActiveViews(
@@ -220,6 +236,9 @@ class ColorTransformProcessor:
             config.setActiveViews(
                 f"{view_name},{self.active_views}"
             )
+        for k, v in self.ocio_environment.items():
+            config.addEnvironmentVar(k, v)
+        config.setDescription(str(self.ocio_environment))
         config.validate()
         config_lines = config.serialize().splitlines()
         for i, l in enumerate(config_lines.copy()):
@@ -515,3 +534,220 @@ class RepoTransformProcessor:
 
         return cmd
 
+
+@dataclass
+class SlateProcessor():
+    slates: list = field(default_factory=lambda: list([]))
+    thumbs: list = field(default_factory=lambda: list([]))
+    charts: list = field(default_factory=lambda: list([]))
+    data: dict = field(default_factory = lambda: dict({}))
+    width: int = None
+    height: int = None
+    staging_dir: str = None
+    slate_template_path: str = None
+    _staged_template_path: str = None
+    _driver: webdriver.Chrome = None
+    _thumb_class_name = "thumb"
+    _chart_class_name = "chart"
+
+    def __post_init__(self):
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--hide-scrollbars")
+        options.add_argument("--show-capture=no")
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        self._driver = webdriver.Chrome(options=options)
+
+    def set_viewport_size(self, width: int, height: int) -> None:
+        window_size = self._driver.execute_script("""
+            return [window.outerWidth - window.innerWidth + arguments[0],
+            window.outerHeight - window.innerHeight + arguments[1]];
+            """, width, height)
+        self._driver.set_window_size(*window_size)
+    
+    def format_slate(self,
+                     data: dict = None,
+                     slate_template_path: str = None,
+                     staging_dir: str = None) -> str:
+
+        if not data:
+            if not self.data:
+                raise ValueError("Missing subst_data to format template!")
+            else:
+                data = self.data
+        
+        if not slate_template_path:
+            if not self.slate_template_path:
+                raise ValueError("Missing slate template path!")
+            else:
+                slate_template_path = self.slate_template_path
+        
+        if not staging_dir:
+            if not self.staging_dir:
+                raise ValueError("Missing staging dir!")
+            else:
+                staging_dir = self.staging_dir
+        
+        slate_staging_path = os.path.join(
+            self.staging_dir,
+            os.path.basename(
+                os.path.dirname(slate_template_path)
+            ),
+            os.path.basename(slate_template_path)
+        )
+
+        with open(slate_template_path, "r") as p:
+            formatted_slate = p.read().format_map(format_dict(data))
+        
+        dest_dir = os.path.dirname(slate_staging_path)
+
+        if os.path.isdir(dest_dir):
+            self.clean_staged_files(dest_dir)
+        
+        shutil.copytree(
+            src=os.path.dirname(slate_template_path),
+            dst=dest_dir
+        )
+
+        with open(slate_staging_path, "w") as p:
+            p.write(formatted_slate)
+
+        self._staged_template_path = slate_staging_path
+
+        return formatted_slate
+
+    def render_slate(self,
+                     output_path: str,
+                     slate_template_path: str = None,
+                     width: int = None,
+                     height: int = None) -> dict:
+        
+        if not output_path:
+            raise ValueError("No output path specified!")
+
+        if not slate_template_path:
+            if not self._staged_template_path:
+                raise ValueError("Missing formatted template!")
+            else:
+                slate_template_path = self._staged_template_path
+        
+        if not width:
+            if not self.width:
+                raise ValueError("Missing width!")
+            else:
+                width = self.width
+
+        if not height:
+            if not self.height:
+                raise ValueError("Missing height!")
+            else:
+                height = self.height
+
+        self._driver.get(slate_template_path)
+        self.set_viewport_size(width, height)
+        
+        self.slates.append(
+            utils.ImageInfo(
+                filename = output_path,
+                data_width = width,
+                data_height = height,
+                data_origin_x = 0,
+                data_origin_y = 0
+            )
+        )
+
+        thumbs = self._driver.find_elements(By.CLASS_NAME, self._thumb_class_name)
+        for t in thumbs:
+            src_path = t.get_attribute("src")
+            if src_path:
+                aspect_ratio = self.width/self.height
+                thumb_height = int(t.size["width"]/aspect_ratio)
+                self._driver.execute_script("""
+                    var element = arguments[0];
+                    element.style.height = '{}px'
+                    """.format(thumb_height), t)
+                self.thumbs.append(
+                    utils.ImageInfo(
+                        filename = src_path.replace("file:///", ""),
+                        data_origin_x = t.location["x"],
+                        data_origin_y = t.location["y"],
+                        data_width = t.size["width"],
+                        data_height = thumb_height
+                    )
+                )
+        for t in thumbs:
+            self._driver.execute_script("""
+                var element = arguments[0];
+                element.parentNode.removeChild(element);
+                """, t)
+        
+        charts = self._driver.find_elements(By.CLASS_NAME, self._chart_class_name)
+        for c in charts:
+            src_path = c.get_attribute("src")
+            if src_path:
+                self.charts.append(
+                    utils.ImageInfo(
+                        filename = src_path.replace("file:///", ""),
+                        data_origin_x = c.location["x"],
+                        data_origin_y = c.location["y"],
+                        data_width = c.size["width"],
+                        data_height = c.size["height"]
+                    )
+                )
+        for c in charts:
+            self._driver.execute_script("""
+                var element = arguments[0];
+                element.parentNode.removeChild(element);
+                """, c)
+
+        self._driver.save_screenshot(output_path)
+
+        self._driver.quit()
+
+        label = "base"
+
+        cmd = ["oiiotool"]
+        cmd.extend([
+            "-i", output_path,
+            "--colorconvert", "sRGB", "linear",
+            "--ch", "R,G,B,A=1.0",
+            "--label", "slate",
+            "--create", f"{self.width}x{self.height}", "4",
+            "--ch", "R,G,B,A=0.0",
+            "--label", label
+        ])
+        for i, t in enumerate(self.thumbs):
+            if i > 0:
+                label = "thumbs"
+            cmd.extend([
+                "-i", t.filename,
+                "--ch", "R,G,B,A=1.0",
+                "--resample", f"{t.data_width}x{t.data_height}+{t.data_origin_x}+{t.data_origin_y}",
+                label, "--over",
+                "--label", "thumbs"
+            ])
+        cmd.extend([
+            "-o", "results/thumb.exr",
+            "slate", "--over",
+            "-o", "results/test.exr",
+            "--colorconvert", "linear", "sRGB",
+            "--ch", "R,G,B"
+            "-o", os.path.join(os.path.dirname(output_path), "test.png")
+        ])
+
+        subprocess.run(cmd)
+
+        return {
+            "slates": self.slates,
+            "thumbs": self.thumbs,
+            "charts": self.charts
+        }
+
+    def clean_staged_files(self, slate_template_path: str = None) -> None:
+        if not slate_template_path:
+            if not self._staged_template_path:
+                raise ValueError("Can't determine staged slate path!")
+            else:
+                slate_template_path = self._staged_template_path
+        shutil.rmtree(os.path.dirname(slate_template_path))

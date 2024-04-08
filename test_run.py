@@ -10,9 +10,10 @@ OCIO_PATH = "vendor/bin/ocioconfig/OpenColorIOConfigs/aces_1.2/config.ocio"
 INPUT_PATH = "resources/public/plateMain/v000/BLD_010_0010_plateMain_v000.1001.exr"
 EFFECT_PATH = "resources/public/effectPlateMain/v000/BLD_010_0010_effectPlateMain_v000.json"
 OUTPUT_PATH = "results/BLD_010_0010_resultMain_v000.1001.png"
-OUTPUT_CONFIG = "results/BLD_010_0010_configMain.ocio"
+OUTPUT_CONFIG = "results/config.ocio"
 OUTPUT_WIDTH = 1920
 OUTPUT_HEIGHT = 1080
+CONTEXT = "BLD_010_0010"
 
 # Env setup
 script_location = os.path.dirname(os.path.realpath(__file__))
@@ -32,10 +33,16 @@ effect_data = epr.get_data()
 
 # Compute color transforms and build ocio config
 cpr = lablib.processors.ColorTransformProcessor(
-    context = "BLD_010_0010",
+    context = CONTEXT,
     config_path = OCIO_PATH,
     temp_config_path = OUTPUT_CONFIG,
-    active_views = "sRGB, Rec.709, Log, Raw"
+    active_views = "sRGB, Rec.709, Log, Raw",
+    ocio_environment={
+        "parent_id": "whatever_id_here",
+        "parent_asset": CONTEXT,
+        "parent_subset": "effectPlateMain",
+        "parent_version": "0"
+    }
 )
 cpr.add_transform(effect_data["color"])
 
