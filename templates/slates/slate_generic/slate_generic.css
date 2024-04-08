@@ -68,15 +68,15 @@ body {
     grid-template-areas:
         "thumbs"
         "."
-        "color-check";
+        "charts";
     z-index: 1;
 }
-.color-check {
-    grid-area: color-check;
+.charts {
+    grid-area: charts;
     width: 100%;
     align-self: end;
 }
-.chroma-check {
+.chroma {
     width: 100%;
     height: 3vh;
     background: linear-gradient(
@@ -91,7 +91,7 @@ body {
     );
     bottom: 0%;
 }
-.luma-check{
+.luma {
     width: 100%;
     height: 3vh;
     background: linear-gradient(
@@ -103,7 +103,7 @@ body {
 }
 .thumbs {
     grid-area: thumbs;
-    width: 100%
+    width: 100%;
 }
 .thumb {
     width: 100%;
