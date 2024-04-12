@@ -738,20 +738,30 @@ class SlateProcessor():
         ])
         for i, t in enumerate(self.thumbs):
             if i > 0:
-                label = "thumbs"
+                label = "imgs"
             cmd.extend([
                 "-i", t.filename,
                 "--ch", "R,G,B,A=1.0",
                 "--resample", f"{t.data_width}x{t.data_height}+{t.data_origin_x}+{t.data_origin_y}",
                 label, "--over",
-                "--label", "thumbs"
+                "--label", "imgs"
+            ])
+        for i, c in enumerate(self.charts):
+            cmd.extend([
+                "-i", c.filename,
+                "--colorconvert", "sRGB", "linear",
+                "--ch", "R,G,B,A=1.0",
+                "--resample", f"{c.data_width}x{c.data_height}+{c.data_origin_x}+{c.data_origin_y}",
+                "imgs", "--over",
+                "--label", "imgs"
             ])
         cmd.extend([
             "-o", "results/thumb.exr",
             "slate", "--over",
+            "--label", "complete_slate",
             "-o", "results/test.exr",
             "--colorconvert", "linear", "sRGB",
-            "--ch", "R,G,B"
+            "--ch", "R,G,B",
             "-o", os.path.join(os.path.dirname(output_path), "test.png")
         ])
 
