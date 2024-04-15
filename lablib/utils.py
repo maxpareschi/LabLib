@@ -173,3 +173,21 @@ def offset_timecode(tc: str,
     )
     return computed_tc
 
+
+
+
+
+referenceSpace: OCIO.ReferenceSpaceType = None,
+name: str = None,
+aliases: list[str] = None,
+family: str = None,
+encoding: str = None,
+equalityGroup: str = None,
+description: str = None,
+bitDepth: OCIO.BitDepth = None,
+isData: bool = False,
+allocation: PyOpenColorIO.Allocation = None,
+allocationVars: list[float] = None,
+toReference: OCIO.Transform = None,
+fromReference: OCIO.Transform = None,
+categories: list[str] = None

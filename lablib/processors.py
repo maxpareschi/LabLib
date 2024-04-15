@@ -133,6 +133,7 @@ class ColorTransformProcessor:
     active_views: str = None
     ocio_environment: dict = field(default_factory = lambda: dict({}))
     ocio_description: str = None
+    ocio_family: str = None
     _class_search_key: str = "class"
     _AYON_DESC_KEY = "AYON_OCIO_SUBSET_INFO"
     _ocio_config: OCIO.Config = None
@@ -237,12 +238,24 @@ class ColorTransformProcessor:
         )
         for i, sp in enumerate(search_paths):
             search_paths[i] = f"  - {sp}"
+        
         group = OCIO.GroupTransform(ocio_transforms_list)
+
+        cspace = OCIO.ColorSpace()
+        cspace.setName(view_name)
+        cspace.setFamily(self.ocio_family)
+        cspace.setTransform(group, OCIO.ColorSpaceDirection.COLORSPACE_DIR_FROM_REFERENCE)
+        
         look = OCIO.Look(
             name = view_name,
             processSpace = self.working_space,
-            transform = group
+            transform = OCIO.ColorSpaceTransform(
+                src = self.working_space,
+                dst = view_name
+            )
         )
+
+        config.addColorSpace(cspace)
         config.addLook(look)
         config.addDisplayView(
             "ACES",
