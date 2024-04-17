@@ -10,14 +10,12 @@ import os
 import uuid
 import copy
 import shutil
-import subprocess
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
 import PyOpenColorIO as OCIO
-import clique
 
 from . import (
     utils,
