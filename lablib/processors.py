@@ -152,11 +152,10 @@ class EffectsFileProcessor:
 class ColorProcessor:
     config_path: str = field(default_factory = lambda: Path(
         os.environ.get("OCIO")).as_posix())
-    dest_path: str = field(default_factory = lambda: Path(
+    staging_dir: str = field(default_factory = lambda: Path(
         os.environ.get("TEMP", os.environ["TMP"]),
         "LabLib",
-        str(uuid.uuid4()),
-        "config.ocio").resolve().as_posix())
+        str(uuid.uuid4())).resolve().as_posix())
     context: str = "LabLib"
     family: str = "LabLib"
     working_space: str = "ACES - ACEScg"
@@ -167,6 +166,7 @@ class ColorProcessor:
     _ocio_config: OCIO.Config = None
     _ocio_transforms: list = field(default_factory = lambda: list([]))
     _ocio_search_paths: list = field(default_factory = lambda: list([]))
+    _dest_path: str = None
 
     # @property
     # def operators(self) -> None:
@@ -360,20 +360,22 @@ class ColorProcessor:
         dest.parent.mkdir(exist_ok=True, parents=True)
         with open(dest.as_posix(), "w") as f:
             f.write(final_config)
+        return final_config
 
     def create_config(self, dest: str = None) -> None:
-        if not dest: dest = self.dest_path
+        if not dest: dest = Path(self.staging_dir, "config.ocio")
         dest = Path(dest).resolve().as_posix()
         self.load_config_from_file(Path(self.config_path).resolve().as_posix())
         self._get_absolute_search_paths()
         self.process_config()
         self.write_config(dest)
+        self._dest_path = dest
         return dest
     
     def get_oiiotool_cmd(self) -> list:
         cmd = [
             "--colorconfig",
-            self.dest_path,
+            self._dest_path,
             "--ociolook:from=\"{}\":to=\"{}\"".format(self.working_space,
                                                       self.working_space),
             self.context
@@ -499,20 +501,10 @@ class SlateProcessor:
     data: dict = field(default_factory = lambda: dict({}))
     width: int = 1920
     height: int = 1080
-    staging_dir: str = field(default_factory = lambda: Path(
-        os.environ.get("TEMP", os.environ["TMP"]),
-        "lablib",
-        str(uuid.uuid4())).resolve().as_posix())
+    staging_dir: str = ""
     slate_template_path: str = None
-    slate_dest_path: str = None
+    source_files: list = field(default_factory = lambda: list([]))
     is_source_linear: bool = True
-    _base_sequence: list = field(default_factory = lambda: list([]))
-    _slate_computed: str = None
-    _slate_staged_path: str = None
-    _driver: webdriver.Chrome = None
-    _thumb_class_name = "thumb"
-    _chart_class_name = "chart"
-    _template_staging_dirname = "template_staging"
 
     def __post_init__(self):
         options = Options()
@@ -521,25 +513,30 @@ class SlateProcessor:
         options.add_argument("--hide-scrollbars")
         options.add_argument("--show-capture=no")
         options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        self.staging_dir = utils.get_staging_dir()
         self._driver = webdriver.Chrome(options = options)
+        self._thumb_class_name: str = "thumb"
+        self._chart_class_name: str = "chart"
+        self._template_staging_dirname: str = "template_staging"
+        self._slate_staged_path: str = None
+        self._slate_computed: str = None
+        self._slate_base_image_path: str = None
+        self._remove_missing_parents: bool = True
 
     def get_staging_dir(self) -> str:
         return self.staging_dir
 
-    def get_slate_base_path(self) -> str:
-        pass
+    def set_remove_missing_parent(self, remove: bool = True) -> None:
+        self._remove_missing_parents = remove
 
     def set_linear_working_space(self, is_linear: bool) -> None:
         self.is_source_linear = is_linear
 
-    def set_base_sequence(self, sequence: list) -> None:
-        self._base_sequence = sequence
+    def set_source_files(self, files: list) -> None:
+        self.source_files = files
 
     def set_template_path(self, path: str) -> None:
         self.slate_template_path = Path(path).resolve().as_posix()
-    
-    def set_dest_path(self, path: str) -> None:
-        self.slate_dest_path = Path(path).resolve().as_posix()
     
     def set_staging_dir(self, path: str) -> None:
         self.staging_dir = Path(path).resolve().as_posix()
@@ -564,52 +561,59 @@ class SlateProcessor:
             """, width, height)
         self._driver.set_window_size(*window_size)
     
-    def format_slate(self) -> str:
-        if not self.data:
-            raise ValueError("Missing subst_data to format template!")
-        if not self.slate_template_path:
-            raise ValueError("Missing slate template path!")
+    def stage_slate(self) -> str:
         if not self.staging_dir:
             raise ValueError("Missing staging dir!")
-        with open(self.slate_template_path, "r") as f:
-            formatted_slate = f.read().format_map(
-                utils.format_dict(self.data)
-            )
-        self._slate_computed = formatted_slate
-        return formatted_slate
-    
-    def stage_slate(self) -> str:
+        if not self.slate_template_path:
+            raise ValueError("Missing slate template path!")
         slate_path = Path(self.slate_template_path).resolve()
         slate_dir = slate_path.parent
         slate_name = slate_path.name
-        staging_dir = Path(self.staging_dir, self._template_staging_dirname).resolve()
-        slate_staged_path = Path(staging_dir, slate_name).resolve()
-        staging_dir.mkdir(parents = True, exist_ok = True)
-        shutil.rmtree(staging_dir.as_posix())
+        slate_staging_dir = Path(self.staging_dir, self._template_staging_dirname).resolve()
+        slate_staged_path = Path(slate_staging_dir, slate_name).resolve()
+        slate_staging_dir.mkdir(parents = True, exist_ok = True)
+        shutil.rmtree(slate_staging_dir.as_posix())
         shutil.copytree(src = slate_dir.as_posix(),
-                        dst = staging_dir.as_posix())
-        with open(slate_staged_path.as_posix(), "w") as f:
-            f.seek(0)
-            f.write(self._slate_computed)
-            f.truncate()
+                        dst = slate_staging_dir.as_posix())
         self._slate_staged_path = slate_staged_path.as_posix()
         return self._slate_staged_path
-    
-    def cleanup_staging_dir(self) -> None:
-        shutil.rmtree(self.staging_dir)
+
+    def format_slate(self) -> None:
+        if not self.data:
+            raise ValueError("Missing subst_data to format template!")
+        with open(self._slate_staged_path, "r+") as f:
+            formatted_slate = f.read().format_map(
+                utils.format_dict(self.data))
+            f.seek(0)
+            f.write(formatted_slate)
+            f.truncate()
+        self._driver.get(self._slate_staged_path)
+        elements = self._driver.find_elements(By.XPATH,
+            "//*[contains(text(),'{}')]".format(utils.format_dict._placeholder))
+        for el in elements:
+            self._driver.execute_script("""
+                var element = arguments[0];
+                element.style.display = 'none';                  
+                """, el)
+            if self._remove_missing_parents:
+                parent = el.find_element(By.XPATH, "..")
+                self._driver.execute_script("""
+                    var element = arguments[0];
+                    element.style.display = 'none';                  
+                    """, parent)
+        with open(self._slate_staged_path, "w") as f:
+            f.seek(0)
+            f.write(self._driver.page_source)
+            f.truncate()
 
     def set_thumbnail_sources(self) -> None:
-        thumb_steps = int(len(self._base_sequence) / (len(self.thumbs) + 1))
+        thumb_steps = int(len(self.source_files) / (len(self.thumbs) + 1))
         for i, t in enumerate(self.thumbs):
-            self.thumbs[i].filename = Path(self._base_sequence[thumb_steps * (i + 1)]).resolve().as_posix()
+            self.thumbs[i].filename = Path(self.source_files[thumb_steps * (i + 1)]).resolve().as_posix()
 
     def setup_base_slate(self) -> str:
         self._driver.get(self._slate_staged_path)
         self.set_viewport_size(self.width, self.height)
-        slate_base_path = Path(
-            Path(self.staging_dir),
-            "slate_base.png"
-        ).resolve()
         thumbs = self._driver.find_elements(By.CLASS_NAME, self._thumb_class_name)
         for t in thumbs:
             src_path = t.get_attribute("src")
@@ -650,8 +654,16 @@ class SlateProcessor:
                     var element = arguments[0];
                     element.parentNode.removeChild(element);
                     """, c)
+        slate_base_path = Path(
+            Path(self.staging_dir),
+            "slate_base.png"
+        ).resolve()
         self._driver.save_screenshot(slate_base_path.as_posix())
         self._driver.quit()
+        template_staged_path = Path(self._slate_staged_path).resolve().parent
+        shutil.rmtree(template_staged_path)
+        # template_staged_path.rmdir()
+        return slate_base_path
 
     def get_oiiotool_cmd(self) -> list:
         label = "base"
@@ -700,8 +712,8 @@ class SlateProcessor:
         return cmd
 
     def create_slate(self) -> None:
-        self.format_slate()
         self.stage_slate()
+        self.format_slate()
         self.setup_base_slate()
         self.set_thumbnail_sources()
-        self.get_oiiotool_cmd()
+        # self.get_oiiotool_cmd()

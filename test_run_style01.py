@@ -16,8 +16,8 @@ MOCK_DATA_PATH = "resources/public/mock_data.json"
 EFFECT_PATH = "resources/public/effectPlateMain/v000/BLD_010_0010_effectPlateMain_v000.json"
 SLATE_PATH = "templates/slates/slate_generic/slate_generic.html"
 OUTPUT_PATH = "results/BLD_010_0010_resultMain_v000.1001.png"
-OUTPUT_CONFIG = "results/ocio_staging/config.ocio"
-OUTPUT_SLATE = "results/slate_staging"
+OUTPUT_CONFIG = "results/config.ocio"
+OUTPUT_SLATE = "results"
 OUTPUT_WIDTH = 1920
 OUTPUT_HEIGHT = 1080
 CONTEXT = "BLD_010_0010"
@@ -69,7 +69,7 @@ rpr.add_operators(epr.repo_operators)
 slt = processors.SlateProcessor()
 slt.set_template_path(SLATE_PATH)
 slt.set_staging_dir(OUTPUT_SLATE)
-slt.set_base_sequence([img_info.filename])
+slt.set_source_files([img_info.filename])
 slt.set_data(mock_data)
 slt.set_size(width = OUTPUT_WIDTH,
              height = OUTPUT_HEIGHT)

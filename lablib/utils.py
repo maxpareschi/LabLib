@@ -4,8 +4,9 @@ from copy import deepcopy
 from pathlib import Path
 
 import subprocess
-import inspect
+import os
 import math
+import uuid
 
 import opentimelineio as otio
 
@@ -13,9 +14,9 @@ from .operators import ImageInfo
 
 
 class format_dict(dict):
-    def __missing__(self, key): 
-        #return key.join("{}")
-        return ""
+    _placeholder = "**MISSING**"
+    def __missing__(self, key) -> str: 
+        return self._placeholder
 
 
 def read_image_info(path: str,
@@ -170,8 +171,16 @@ def offset_timecode(tc: str,
     return computed_tc
 
 
+def get_staging_dir() -> str:
+    temp_dir = Path(
+        os.environ.get("TEMP", os.environ["TMP"]),
+        "lablib",
+        str(uuid.uuid4())).resolve().as_posix()
+    return temp_dir
+
+
 def zero_matrix() -> list[list[float]]:
-        return [[0.0 for i in range(3)] for j in range(3)]
+    return [[0.0 for i in range(3)] for j in range(3)]
 
 
 def identity_matrix() -> list[list[float]]:
@@ -310,4 +319,4 @@ def calculate_matrix(t: list[float],
     result = mult_matrix(result, scale)
     result = mult_matrix(result, rotate)
     result = mult_matrix(result, center_inv)
-    return result 
+    return result
