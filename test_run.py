@@ -31,6 +31,8 @@ img_info = lablib.utils.read_image_info(filepath)
 epr = lablib.processors.EffectsFileProcessor(input_file=EFFECT_PATH)
 effect_data = epr.get_data()
 
+print(effect_data)
+
 # Compute color transforms and build ocio config
 cpr = lablib.processors.ColorTransformProcessor(
     context = CONTEXT,

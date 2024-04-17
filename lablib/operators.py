@@ -74,11 +74,11 @@ def get_repo_classes() -> tuple:
 
 
 def get_OCIO_class_names() -> tuple:
-    return tuple([f"OCIO{c.__name__}" for c in get_OCIO_classes()]) + EXTRA_OCIO_CLASS_NAMES
+    return tuple(["OCIO{}".format(c.__name__) for c in get_OCIO_classes()]) + EXTRA_OCIO_CLASS_NAMES
 
 
 def get_repo_class_names() -> tuple:
-    return tuple([c.__name__.replace('Repo', '') for c in get_repo_classes()])
+    return tuple([c.__name__.replace("Repo", "") for c in get_repo_classes()])
 
 
 def get_valid_parameters() -> tuple:
