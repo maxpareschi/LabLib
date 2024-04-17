@@ -1,7 +1,7 @@
 import os
 import json
 
-from lablib_new import (
+from lablib import (
     utils,
     processors
 )

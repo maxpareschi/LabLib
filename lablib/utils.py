@@ -1,25 +1,21 @@
 from __future__ import annotations
-from dataclasses import dataclass
+
 from copy import deepcopy
-import os
+from pathlib import Path
 
 import subprocess
+import inspect
+import math
+
 import opentimelineio as otio
 
+from .operators import ImageInfo
 
-@dataclass
-class ImageInfo():
-    filename: str = None
-    data_origin_x: int = None
-    data_origin_y: int = None
-    data_width: int = None
-    data_height: int = None
-    display_width: int = None
-    display_height: int = None
-    channels: int = None
-    fps: float = None
-    par: float = None
-    timecode: str = None
+
+class format_dict(dict):
+    def __missing__(self, key): 
+        #return key.join("{}")
+        return ""
 
 
 def read_image_info(path: str,
@@ -34,14 +30,14 @@ def read_image_info(path: str,
     if not default_par: default_par = 1.0
     if not default_channels: default_channels = 3
 
-    abspath = os.path.abspath(path).replace("\\", "/")
+    abspath = Path(path).as_posix()
 
     result = {
         "filename": abspath,
-        "data_width": None,
-        "data_height": None,
-        "data_origin_x": None,
-        "data_origin_y": None,
+        "origin_x": None,
+        "origin_y": None,
+        "width": None,
+        "height": None,
         "display_width": None,
         "display_height": None,
         "channels": None,
@@ -86,8 +82,8 @@ def read_image_info(path: str,
             size = vars[0].strip().split("x")
             channels = vars[1].strip().split(" ")
             iinfo_res.update({
-                "data_width": int(size[0].strip()),
-                "data_height": int(size[1].strip()),
+                "width": int(size[0].strip()),
+                "height": int(size[1].strip()),
                 "display_width": int(size[0].strip()),
                 "display_height": int(size[1].strip()),
                 "channels": int(channels[0].strip())
@@ -106,8 +102,8 @@ def read_image_info(path: str,
         if "pixel data origin" in l:
             origin = l.split(": ")[1].strip().split(",")
             iinfo_res.update({
-                "data_origin_x": int(origin[0].replace("x=", "").strip()),
-                "data_origin_y": int(origin[1].replace("y=", "").strip())
+                "origin_x": int(origin[0].replace("x=", "").strip()),
+                "origin_y": int(origin[1].replace("y=", "").strip())
             })
         if "smpte:TimeCode" in l:
             iinfo_res["timecode"] = l.split(": ")[1].strip()
@@ -140,10 +136,10 @@ def read_image_info(path: str,
         else:
             result[k] = v
     
-    if not result["data_width"]: result["data_width"] = result["display_width"]
-    if not result["data_height"]: result["data_height"] = result["display_height"]
-    if not result["data_origin_x"]: result["data_origin_x"] = 0
-    if not result["data_origin_y"]: result["data_origin_y"] = 0
+    if not result["width"]: result["width"] = result["display_width"]
+    if not result["height"]: result["height"] = result["display_height"]
+    if not result["origin_x"]: result["origin_x"] = 0
+    if not result["origin_y"]: result["origin_y"] = 0
     if not result["timecode"]: result["timecode"] = default_timecode
     if not result["fps"]: result["fps"] = default_fps
     if not result["par"]: result["par"] = default_par
@@ -173,3 +169,145 @@ def offset_timecode(tc: str,
     )
     return computed_tc
 
+
+def zero_matrix() -> list[list[float]]:
+        return [[0.0 for i in range(3)] for j in range(3)]
+
+
+def identity_matrix() -> list[list[float]]:
+    return translate_matrix([0.0, 0.0])
+
+
+def translate_matrix(t: list[float]) -> list[list[float]]:
+    return [
+        [1.0, 0.0, t[0]],
+        [0.0, 1.0, t[1]],
+        [0.0, 0.0, 1.0]
+    ]
+
+
+def rotate_matrix(r: float) -> list[list[float]]:
+    rad = math.radians(r)
+    cos = math.cos(rad)
+    sin = math.sin(rad)
+    return [
+        [cos, -sin, 0.0],
+        [sin, cos, 0.0],
+        [0.0, 0.0, 1.0]
+    ]
+
+
+def scale_matrix(s: list[float]) -> list[list[float]]:
+    return [
+        [s[0], 0.0, 0.0],
+        [0.0, s[1], 0.0],
+        [0.0, 0.0, 1.0]
+    ]
+
+
+def mirror_matrix(x: bool = False) -> list[list[float]]:
+    dir = [1.0, -1.0] if not x else [-1.0, 1.0]
+    return scale_matrix(dir)
+
+
+def mult_matrix(m1: list[list[float]],
+                m2: list[list[float]]) -> list[list[float]]:
+    return [[sum(a * b for a, b in zip(m1_row, m2_col)) for m2_col in zip(*m2)] for m1_row in m1]
+
+
+def mult_matrix_vector(m: list[list[float]],
+                       v: list[float]) -> list[float]:
+    result = [0.0, 0.0, 0.0]
+    for i in range(len(m)):
+        for j in range(len(v)):
+            result[i] += m[i][j] * v[j]
+    return result
+
+
+def flip_matrix(w: float) -> list[list[float]]:
+    result = identity_matrix()
+    chain = [
+        translate_matrix([w, 0.0]),
+        mirror_matrix(x = True)
+    ]
+    for m in chain:
+        result = mult_matrix(result, m)
+    return result
+
+
+def flop_matrix(h: float) -> list[list[float]]:
+    result = identity_matrix()
+    chain = [
+        translate_matrix([0.0, h]),
+        mirror_matrix()
+    ]
+    for m in chain:
+        result = mult_matrix(result, m)
+    return result
+
+
+def transpose_matrix(m: list[list[float]]) -> list[list[float]]:
+    res = identity_matrix()
+    for i in range(len(m)):
+        for j in range(len(m[0])):
+            res[i][j] = m[j][i]
+    return res
+
+
+def matrix_to_44(m: list[list[float]]) -> list[list[float]]:
+    result = m
+    result[0].insert(2, 0.0)
+    result[1].insert(2, 0.0)
+    result[2].insert(2, 0.0)
+    result.insert(2, [0.0, 0.0, 1.0, 0.0])
+    return result
+
+
+def matrix_to_list(m: list[list[float]]) -> list[float]:
+    result = []
+    for i in m:
+        for j in i:
+            result.append(str(j))
+    return result
+
+
+def matrix_to_csv(m: list[list[float]]) -> str:
+        l = []
+        for i in m:
+            for k in i:
+                l.append(str(k))
+        return ",".join(l)
+
+
+def matrix_to_cornerpin(m: list[list[float]],
+                        w: int,
+                        h: int,
+                        origin_upperleft: bool = True) -> list:
+    cornerpin = []
+    if origin_upperleft:
+        corners = [[0, h, 1], [w, h, 1], [0, 0, 1], [w, 0, 1]]
+    else:
+        corners = [[0, 0, 1], [w, 0, 1], [0, h, 1], [w, h, 1]]
+    transformed_corners = [mult_matrix_vector(m, corner) for corner in corners]
+    transformed_corners = [[corner[0] / corner[2], corner[1] / corner[2]] for corner in transformed_corners]
+    for i, corner in enumerate(transformed_corners):
+        x, y = corner
+        cornerpin.extend([x,y])
+    return cornerpin
+
+
+def calculate_matrix(t: list[float],
+                     r: float,
+                     s: list[float],
+                     c: list[float]) -> list[list[float]]:
+    c_inv = [-c[0], -c[1]]
+    center = translate_matrix(c)
+    center_inv = translate_matrix(c_inv)
+    translate = translate_matrix(t)
+    rotate = rotate_matrix(r)
+    scale = scale_matrix(s)
+    result = mult_matrix(translate, center)
+    result = mult_matrix(result, scale)
+    result = mult_matrix(result, rotate)
+    result = mult_matrix(result, center_inv)
+    return result 

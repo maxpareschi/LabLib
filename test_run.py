@@ -1,6 +1,6 @@
 import os
 
-import lablib
+import lablib_old
 
 
 # Constants
@@ -25,16 +25,16 @@ os.environ["OCIO"] = OCIO_PATH
 filepath = os.path.abspath(INPUT_PATH).replace("\\", "/")
 
 # Read Image Info
-img_info = lablib.utils.read_image_info(filepath)
+img_info = lablib_old.utils.read_image_info(filepath)
 
 # Compute Openpype/AYON effect.json
-epr = lablib.processors.EffectsFileProcessor(input_file=EFFECT_PATH)
+epr = lablib_old.processors.EffectsFileProcessor(input_file=EFFECT_PATH)
 effect_data = epr.get_data()
 
 print(effect_data)
 
 # Compute color transforms and build ocio config
-cpr = lablib.processors.ColorTransformProcessor(
+cpr = lablib_old.processors.ColorTransformProcessor(
     context = CONTEXT,
     config_path = OCIO_PATH,
     temp_config_path = OUTPUT_CONFIG,
@@ -52,7 +52,7 @@ cpr = lablib.processors.ColorTransformProcessor(
 cpr.add_transform(effect_data["color"])
 
 # Compute repo transforms
-rpr = lablib.processors.RepoTransformProcessor(
+rpr = lablib_old.processors.RepoTransformProcessor(
     source_width = img_info.display_width,
     source_height = img_info.display_height,
     dest_width = OUTPUT_WIDTH,
@@ -61,7 +61,7 @@ rpr = lablib.processors.RepoTransformProcessor(
 rpr.add_transform(effect_data["repo"])
 
 # Render Result with Default Renderer
-render = lablib.renderers.DefaultRenderer(
+render = lablib_old.renderers.DefaultRenderer(
     color_transform = cpr,
     repo_transform = rpr
 )

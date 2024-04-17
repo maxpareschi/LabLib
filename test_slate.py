@@ -4,7 +4,7 @@ import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-from lablib import processors as prc
+from lablib_old import processors as prc
 
 root_dir = os.path.dirname(os.path.realpath(__file__)).replace("\\", "/")
 staging_dir = os.path.abspath(f"{root_dir}/results")
