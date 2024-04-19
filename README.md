@@ -1,7 +1,5 @@
 # LabLib
 
----
-
 Generate intermediate sequences for VFX processing using OIIO and FFMPEG!
 
 This module aims to help by providing helper classes and functions to:
