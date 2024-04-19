@@ -11,13 +11,14 @@ from lablib import (
 FFMPEG_PATH = "vendor/bin/ffmpeg/windows/bin"
 OIIO_PATH = "vendor/bin/oiio/windows"
 OCIO_PATH = "vendor/bin/ocioconfig/OpenColorIOConfigs/aces_1.2/config.ocio"
+
+STAGING_DIR = "results"
+
 INPUT_PATH = "resources/public/plateMain/v000/BLD_010_0010_plateMain_v000.1001.exr"
 MOCK_DATA_PATH = "resources/public/mock_data.json"
 EFFECT_PATH = "resources/public/effectPlateMain/v000/BLD_010_0010_effectPlateMain_v000.json"
 SLATE_PATH = "templates/slates/slate_generic/slate_generic.html"
 OUTPUT_PATH = "results/BLD_010_0010_resultMain_v000.1001.png"
-OUTPUT_CONFIG = "results/ocio_staging/config.ocio"
-OUTPUT_SLATE = "results/slate_staging"
 OUTPUT_WIDTH = 1920
 OUTPUT_HEIGHT = 1080
 CONTEXT = "BLD_010_0010"
@@ -51,30 +52,43 @@ description = {
 
 # Compute color transforms and build ocio config
 cpr = processors.ColorProcessor(
-    dest_path = OUTPUT_CONFIG,
-    _operators = epr.color_operators,
-    _views = ["sRGB", "Rec.709", "Log", "Raw"],
-    _description = json.dumps(description),
-    _vars = description
+    operators = epr.color_operators,
+    config_path = OCIO_PATH,
+    staging_dir = STAGING_DIR,
+    context = CONTEXT,
+    family = "TestOCIO",
+    working_space = "ACES - ACEScg"
 )
-cpr.create_config()
+cpr.set_views(["sRGB", "Rec.709", "Log", "Raw"])
+cpr.set_description(json.dumps(description))
+cpr.set_vars(**description)
+cpr_path = cpr.create_config()
+cpr_cmd = cpr.get_oiiotool_cmd()
 
 # Compute repo transforms
 rpr = processors.RepoProcessor(
+    operators = epr.repo_operators,
     source_width = img_info.display_width,
-    source_height = img_info.display_height,
+    source_height =img_info.display_height,
     dest_width = OUTPUT_WIDTH,
     dest_height = OUTPUT_HEIGHT
 )
-rpr.add_operators(epr.repo_operators)
+rpr.get_matrix_chained()
+rpr_cmd = rpr.get_oiiotool_cmd()
 
 # Compute slate
 slt = processors.SlateProcessor(
-    _slate_template_path = SLATE_PATH,
-    _staging_dir = OUTPUT_SLATE,
-    _base_sequence = [img_info.filename],
+    data = mock_data,
     width = OUTPUT_WIDTH,
     height = OUTPUT_HEIGHT,
-    data = mock_data
+    staging_dir = STAGING_DIR,
+    slate_template_path = SLATE_PATH,
+    source_files = [img_info.filename],
 )
 slt.create_slate()
+slt_cmd = slt.get_oiiotool_cmd()
+
+cpr_cmd.extend(rpr_cmd)
+cpr_cmd.extend(slt_cmd)
+
+print("\n\n\n", " ".join(cpr_cmd))
