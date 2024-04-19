@@ -53,10 +53,11 @@ Please see the sample `test_run.py` for an usage example.
 - Python >= 3.7 (but keep in mind that otio and ocio wheels need to be built for >= 3.11)
 - [Download OIIO](https://www.patreon.com/posts/openimageio-oiio-53939451)
 - [Download FFMPEG](https://www.ffmpeg.org/download.html)
+- [Download OCIO Configs](https://github.com/imageworks/OpenColorIO-Configs)
 - Install PyOpenColorIO: `pip install opencolorio`
 - Install OpenTimelineIO: `pip install opentimelineio`
 - Install Selenium: `pip install selenium`
-- Install clique: `pip install clique`
+- Install Clique: `pip install clique`
 
 or even better just `pip install requirements.txt` in your own virtual environment! 
 
