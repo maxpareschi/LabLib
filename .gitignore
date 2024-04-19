@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+test_run_private.py
 
 # Mac Stuff
 ###########

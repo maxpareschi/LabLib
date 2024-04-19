@@ -599,8 +599,8 @@ class SlateProcessor:
         slate_name = slate_path.name
         slate_staging_dir = Path(self.staging_dir, self._template_staging_dirname).resolve()
         slate_staged_path = Path(slate_staging_dir, slate_name).resolve()
+        shutil.rmtree(slate_staging_dir.as_posix(), ignore_errors = True)
         slate_staging_dir.mkdir(parents = True, exist_ok = True)
-        shutil.rmtree(slate_staging_dir.as_posix())
         shutil.copytree(src = slate_dir.as_posix(),
                         dst = slate_staging_dir.as_posix())
         self._slate_staged_path = slate_staged_path.as_posix()

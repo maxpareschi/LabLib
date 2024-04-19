@@ -56,6 +56,7 @@ Please see the sample `test_run.py` for an usage example.
 - Install PyOpenColorIO: `pip install opencolorio`
 - Install OpenTimelineIO: `pip install opentimelineio`
 - Install Selenium: `pip install selenium`
+- Install clique: `pip install clique`
 
 or even better just `pip install requirements.txt` in your own virtual environment! 
 

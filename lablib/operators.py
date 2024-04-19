@@ -1,6 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 
+import os
+
+import clique
 
 @dataclass
 class ImageInfo:
@@ -15,6 +18,41 @@ class ImageInfo:
     fps: float = 24.0
     par: float = 1.0
     timecode: str = "01:00:00:01"
+
+
+@dataclass
+class SequenceInfo:
+    frames: list[str] = field(default_factory = lambda: list([]))
+    frame_start: int = None
+    frame_end: int = None
+    head: str = None
+    tail: str = None
+    padding: int = 0
+    hash_string: str = None
+    format_string: str = None
+
+    def compute(self,
+                collection: clique.Collection,
+                collection_path: str) -> None:
+        self.frames = [f for f in collection]
+        self.frame_start = int(self.frames[0].replace(collection.head, "").replace(collection.tail,""))
+        self.frame_end = int(self.frames[len(self.frames)-1].replace(collection.head, "").replace(collection.tail,""))
+        self.head = collection.head
+        self.tail = collection.tail
+        self.padding = len(str(self.frame_start))
+        self.frames = [os.path.abspath(os.path.join(collection_path, f)).replace("\\", "/") for f in collection]
+        self.hash_string = os.path.abspath(
+            os.path.join(
+                collection_path,
+                collection.format("{head}#{tail}")
+            )
+        ).replace("\\", "/")
+        self.format_string = os.path.abspath(
+            os.path.join(
+                collection_path,
+                "{}{}{}".format(collection.head, "%0{}d".format(self.padding), collection.tail)
+            )
+        ).replace("\\", "/")
 
 
 @dataclass
