@@ -77,7 +77,7 @@ rend = renderers.DefaultRenderer(
     repo_proc = rpr,
     source_sequence = main_seq,
     staging_dir = STAGING_DIR,
-    name = "BLD_010_0010_Converted"
+    format = ".png"
 )
 # rend.set_debug(True)
 rend.set_threads(8)

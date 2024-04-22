@@ -18,6 +18,7 @@ class DefaultRenderer:
     source_sequence: SequenceInfo = None
     staging_dir: str = None
     name: str = None
+    format: str = None
 
     def __post_init__(self) -> None:
         self._debug: bool = False
@@ -77,11 +78,19 @@ class DefaultRenderer:
             cmd.extend([
                 "--debug", "-v"
             ])
+        if self.format:
+            dest_path = "{}{}{}".format(
+                self.source_sequence.head,
+                "#",
+                ".{}".format(self.format) if self.format.find(".") < 0 else self.format
+            )
+        else:
+            dest_path = self.source_sequence.hash_string
         cmd.extend([
             "-o", Path(
                 self.staging_dir,
                 self.name,
-                self.source_sequence.hash_string
+                dest_path
             ).resolve().as_posix()
         ])
         self._command = cmd
