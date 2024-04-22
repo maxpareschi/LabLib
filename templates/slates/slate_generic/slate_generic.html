@@ -3,7 +3,7 @@
         <link rel="stylesheet" href="slate_generic.css" />
     </head>
     <body>
-        <img class="logo_footer" src="logo.svg" />
+        <!--<img class="logo_footer" src="logo.svg" />-->
         <div class="main-container">
             <div class="info-container">
                 <div class="title">{project[name]}</div>
@@ -18,9 +18,9 @@
                 </div>
                 <div class="info-entry">
                     <div class="info-desc">Resolution:</div>
-                    <div class="info-text">{resolution_width}x{resolution_height}</div>
+                    <div class="info-text">{resolution_width} x {resolution_height}</div>
                 </div>
-                <div class="info-entry" {scope_optional}>
+                <div class="info-entry">
                     <div class="info-desc">Scope:</div>
                     <div class="info-text">{scope}</div>
                 </div>
@@ -35,7 +35,8 @@
             </div>
             <div class="sidebar">
                 <div class="thumbs">
-                    <img class="thumb" src="{thumbnail}" />
+                    <img class="thumb" src="slate_generic_thumb.jpg" />
+                    <img class="thumb" src="slate_generic_thumb.jpg" />
                 </div>
                 <div class="charts">
                     <img class="chart" src="slate_generic_chart.png" />

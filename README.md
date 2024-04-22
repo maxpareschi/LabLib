@@ -1,7 +1,5 @@
 # LabLib
 
----
-
 Generate intermediate sequences for VFX processing using OIIO and FFMPEG!
 
 This module aims to help by providing helper classes and functions to:
@@ -31,11 +29,11 @@ Please see the sample `test_run.py` for an usage example.
 
 ### Features (Planned and Done)
 
-- [x] Reposition Processor
-- [x] ColorTransform Processor
+- [x] Repo Processor
+- [x] Color Processor
+- [x] Slate Processor
 - [ ] Burnins Processor
-- [ ] Slate Processor (still not ported from Slater)
-- [ ] FFMPEG final compression ro format
+- [ ] FFMPEG final compression to format
 - [ ] Settings and presets from json
 - [ ] Commandline parser
 - [ ] QT gui (will probably never happen)
@@ -50,11 +48,13 @@ Please see the sample `test_run.py` for an usage example.
 ---
 
 ### Required Dependencies
-- Python >= 3.7
+- Python >= 3.7 (but keep in mind that otio and ocio wheels need to be built for >= 3.11)
 - [Download OIIO](https://www.patreon.com/posts/openimageio-oiio-53939451)
 - [Download FFMPEG](https://www.ffmpeg.org/download.html)
+- [Download OCIO Configs](https://github.com/imageworks/OpenColorIO-Configs)
 - Install PyOpenColorIO: `pip install opencolorio`
 - Install OpenTimelineIO: `pip install opentimelineio`
+- Install Selenium: `pip install selenium`
 
 or even better just `pip install requirements.txt` in your own virtual environment! 
 

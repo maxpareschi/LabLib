@@ -1,525 +1,469 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
 
-import os
-import math
+from typing import Any
+from dataclasses import dataclass, field
+from pathlib import Path
+
 import json
+import inspect
+import os
+import uuid
 import copy
 import shutil
 import subprocess
-
-import PyOpenColorIO as OCIO
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
+import PyOpenColorIO as OCIO
+
 from . import (
-    operators as ops,
-    utils
+    utils,
+    operators as ops
 )
-
-
-class format_dict(dict):
-    def __missing__(self, key): 
-        #return key.join("{}")
-        return ""
 
 
 @dataclass
 class EffectsFileProcessor:
-    input_file: str = None
-    color_ops: list = field(default_factory = lambda: list([]))
-    repo_ops: list = field(default_factory = lambda: list([]))
-    _class_search_key = "class"
-    _index_search_key = "subTrackIndex"
+    src: str
 
-    def __post_init__(self):
-        if self.input_file:
-            self.load(self.input_file)
-            self.process()
+    @property
+    def color_operators(self) -> dict:
+        return self._color_ops
+    
+    @color_operators.setter
+    def color_operators(self, color_ops: list) -> None:
+        self._color_ops = color_ops
 
-    def _load_append(self, file: str = None) -> None:
-        if file:
-            self.input_file = file
-        if self.input_file:
-            with open(self.input_file, "r") as f:
-                _ops = json.load(f)
+    @color_operators.deleter
+    def color_operators(self) -> None:
+        self._color_ops = []
+    
+    @property
+    def repo_operators(self) -> dict:
+        return self._repo_ops
+    
+    @repo_operators.setter
+    def repo_operators(self, repo_ops: list) -> None:
+        self._repo_ops = repo_ops
+
+    @repo_operators.deleter
+    def repo_operators(self) -> None:
+        self._repo_ops = []
+
+    def __post_init__(self) -> None:
+        self._wrapper_class_members = dict(inspect.getmembers(ops, inspect.isclass))
+        self._wrapper_class_names = [v for v in self._wrapper_class_members.keys()]
+        self._color_ops: list = list([])
+        self._repo_ops: list = list([])
+        self._class_search_key: str = "class"
+        self._index_search_key: str = "subTrackIndex"
+        self._data_search_key: str = "node"
+        self._valid_attrs: tuple = tuple((
+            "in_colorspace",
+            "out_colorspace",
+            "file",
+            "saturation",
+            "display",
+            "view",
+            "translate",
+            "rotate",
+            "scale",
+            "center",
+            "power",
+            "offset",
+            "slope",
+            "direction"
+        ))
+        self._valid_attrs_mapping: dict = dict({
+            "in_colorspace": "src",
+            "out_colorspace": "dst",
+            "file": "src",
+            "saturation": "sat"
+        })
+        if self.src:
+            self.load(self.src)
+
+    def _get_operator_class(self, name: str) -> Any:
+        name = "{}Transform".format(name.replace("OCIO", "").replace("Transform", ""))
+        if name in self._wrapper_class_names:
+            return self._wrapper_class_members[name]
+        elif "Repo{}".format(name) in self._wrapper_class_names:
+            return self._wrapper_class_members["Repo{}".format(name)]
         else:
-            raise ValueError(
-                f"Couldn't open file at location {self.input_file}"
-            )
+            return None
+
+    def _get_operator_sanitized(self, op: Any, data: dict) -> Any:
+        # sanitize for different source data structures.
+        # fix for nuke vs ocio, cdl transform should not have a src field by ocio specs
+        if "CDL" in op.__name__:
+            del data["src"]
+        return op(**data)
+
+    def _get_operator(self, data: dict) -> None:
+        result = {}
+        for k, v in data[self._data_search_key].items():
+            if k in self._valid_attrs:
+                if k in self._valid_attrs_mapping:
+                    result[self._valid_attrs_mapping[k]] = v
+                else:
+                    if k == "scale" and isinstance(v, float):
+                        v = [v, v]
+                    result[k] = v
+        op = self._get_operator_class(data[self._class_search_key])
+        return self._get_operator_sanitized(op = op, data = result)
+
+    def _load(self) -> None:
+        with open(self.src, "r") as f:
+            _ops = json.load(f)
         ocio_nodes = []
         repo_nodes = []
-        if isinstance(_ops, dict):
-            for k, v in _ops.items():
-                if isinstance(v, dict) and v[self._class_search_key] in ops.get_OCIO_class_names():
+        for k, v in _ops.items():
+            if isinstance(v, dict):
+                class_name = "{}Transform".format(
+                    v[self._class_search_key].replace("OCIO", "").replace("Transform", "")
+                )
+                if class_name in self._wrapper_class_names:
                     ocio_nodes.append(v)
-                elif isinstance(v, dict) and v[self._class_search_key] in ops.get_repo_class_names():
+                elif "Repo{}".format(class_name) in self._wrapper_class_names:
                     repo_nodes.append(v)
-                else:
-                    continue
-        elif isinstance(_ops, list):
-            for i in _ops:
-                if isinstance(i, dict) and i[self._class_search_key] in ops.get_OCIO_class_names():
-                    ocio_nodes.append(i)
-                elif isinstance(i, dict) and i[self._class_search_key] in ops.get_repo_class_names():
-                    repo_nodes.append(i)
                 else:
                     continue
         ocio_nodes = sorted(ocio_nodes, key=lambda d: d[self._index_search_key])
         repo_nodes = sorted(repo_nodes, key=lambda d: d[self._index_search_key])
         for c in ocio_nodes:
-            self.color_ops.append(dict(ops.get_valid_keys(c, ops.get_valid_parameters())))
-        for r in repo_nodes:
-            self.repo_ops.append(dict(ops.get_valid_keys(r, ops.get_valid_parameters())))
-        for i, r in enumerate(self.repo_ops):
-            if not isinstance(r["scale"], list):
-                self.repo_ops[i]["scale"] = [r["scale"], r["scale"]]
+            self._color_ops.append(self._get_operator(c))
+        for c in repo_nodes:
+            self._repo_ops.append(self._get_operator(c))
 
-    def clear_data(self) -> None:
-        self.input_file = ""
+    def clear_operators(self) -> None:
         self.color_ops = []
         self.repo_ops = []
 
-    def load(self, file: str = None) -> None:
-        self.clear_data()
-        self._load_append(file)
+    def load(self, src: str) -> None:
+        self.src = src
+        self.clear_operators()
+        self._load()
 
-    def process(self) -> None:
-        for i, x in enumerate(copy.deepcopy(self.color_ops)):
-            for k, v in x.items():
-                if k in ops.CLASS_PARAMS_MAPPING:
-                    self.color_ops[i][ops.CLASS_PARAMS_MAPPING[k]] = v
-                    self.color_ops[i].pop(k)
-            self.color_ops[i].pop(self._index_search_key)
-            try:
-                class_name = getattr(ops, x[self._class_search_key].replace("OCIO", ""))
-            except:
-                class_name = getattr(ops, f"{x[self._class_search_key].replace('OCIO', '')}Transform")
-            valid_class_parameters = ops.get_valid_class_parameters(class_name)
-            for k, v in copy.deepcopy(self.color_ops[i]).items():
-                if k not in valid_class_parameters:
-                    self.color_ops[i].pop(k)
-        for i, x in enumerate(copy.deepcopy(self.repo_ops)):
-            for k, v in x.items():
-                if k in ops.CLASS_PARAMS_MAPPING:
-                    self.repo_ops[i][ops.CLASS_PARAMS_MAPPING[k]] = v
-                    self.repo_ops[i].pop(k)
-            self.repo_ops[i].pop(self._index_search_key)
-            try:
-                class_name = getattr(ops, f"Repo{x[self._class_search_key]}")
-            except:
-                class_name = getattr(ops, f"Repo{x[self._class_search_key]}")
-            valid_class_parameters = ops.get_valid_class_parameters(class_name)
-            for k, v in copy.deepcopy(self.repo_ops[i]).items():
-                if k not in valid_class_parameters:
-                    self.repo_ops[i].pop(k)
-
-    def get_data(self) -> dict:
-        return dict({
-            "color": self.color_ops,
-            "repo": self.repo_ops
-        })
-   
 
 @dataclass
-class ColorTransformProcessor:
-    transform_list: list = field(default_factory = lambda: list([]))
-    context: str = "lablib_context"
-    working_space: str = "ACES - ACEScg"
+class ColorProcessor:
+    operators: list = field(default_factory = lambda: list([]))
     config_path: str = None
-    temp_config_path: str = None
-    active_views: str = None
-    ocio_environment: dict = field(default_factory = lambda: dict({}))
-    ocio_description: str = None
-    ocio_family: str = None
-    _class_search_key: str = "class"
-    _AYON_DESC_KEY = "AYON_OCIO_SUBSET_INFO"
-    _ocio_config: OCIO.Config = None
+    staging_dir: str = None
+    context: str = "LabLib"
+    family: str = "LabLib"
+    working_space: str = "ACES - ACEScg"
+    views: list[str] = field(default_factory = lambda: list([]))
 
-    def add_transform(self, *args) -> None:
-        arglist = []
-        for a in args:
-            if isinstance(a, list):
-                for b in a:
-                    arglist.append(b)
-            else:
-                arglist.append(a)
-        for obj in arglist:
-            if isinstance(obj, ops.get_OCIO_classes()):
-                self.transform_list.append(obj)
-            else:
-                try:
-                    class_name = getattr(ops, obj.get(self._class_search_key).replace("OCIO", ""))
-                except:
-                    class_name = getattr(ops, f"{obj.get(self._class_search_key).replace('OCIO', '')}Transform")
-                obj.pop(self._class_search_key)
-                self.transform_list.append(class_name(**obj))
+    def __post_init__(self) -> None:
+        if not self.config_path:
+            self.config_path = Path(os.environ.get("OCIO")).as_posix()
+        if not self.staging_dir:
+            self.staging_dir = Path(os.environ.get("TEMP", os.environ["TMP"]),
+                "LabLib",
+                str(uuid.uuid4())
+                ).resolve().as_posix()
+        self._description: str = None
+        self._vars: dict = dict({})
+        self._views: list[str] = None
+        if self.views:
+            self._views: list[str] = self.set_views(self.views)            
+        self._ocio_config: OCIO.Config = None
+        self._ocio_transforms: list = list([])
+        self._ocio_search_paths: list = list([])
+        self._ocio_config_name: str = "config.ocio"
+        self._dest_path: str = None
+        
 
-    def get_description(self, source: str = None):
-        if not source:
-            if not self._ocio_config:
-                raise ValueError("No config specified or already loaded to work on!")
-            else:
-                config = self._ocio_config
-        else:
-            config = OCIO.Config.CreateFromFile(os.path.abspath(source))
-        desc = config.getDescription()
-        return json.loads(desc.replace("'", "\""))[self._AYON_DESC_KEY]
+    # @property
+    # def operators(self) -> None:
+    #     return self.operators
+    # 
+    # @operators.setter
+    # def operators(self, *args) -> None:
+    #     self.set_operators(*args)
+    # 
+    # @operators.deleter
+    # def operators(self) -> None:
+    #     self.clear_operators()
+    #
+    # @property
+    # def views(self) -> list:
+    #     return self._views
+    # 
+    # @views.setter
+    # def views(self, *args: str | list[str]) -> None:
+    #     self.set_views(*args)
+    # 
+    # @views.deleter
+    # def views(self) -> None:
+    #     self.clear_views()
+    #
+    # @property
+    # def vars(self) -> list:
+    #     return self._vars
+    # 
+    # @vars.setter
+    # def vars(self, var_dict: dict) -> None:
+    #     self.set_vars(**var_dict)
+    # 
+    # @vars.deleter
+    # def vars(self) -> None:
+    #     self.clear_vars()
 
-    def set_active_views(self, views: str | list[str] | tuple[str]) -> None:
-        if isinstance(views, str):
-            self.active_views = views
-        elif isinstance(views, list) or isinstance(views, tuple):
-            self.active_views = ",".join(views)
-        else:
-            raise ValueError("Views argument need to be either \
-                             a comma separated string, a list or a tuple.")
-            
-    def clear_transforms(self) -> None:
-        self.transform_list = []
+    def set_ocio_config_name(self, name: str) -> None:
+        self._ocio_config_name = name
+
+    def set_staging_dir(self, path: str) -> None:
+        self.staging_dir = Path(path).resolve().as_posix()
     
-    def create_ocio_config(self,
-                           source: str = None,
-                           dest: str = None) -> str:
-        if not source:
-            if not self.config_path:
-                ocio_env = os.environ.get("OCIO", None)
-                if not ocio_env:
-                    raise ValueError("Missing source config path!")
-                else:
-                    self.config_path = ocio_env
+    def set_views(self, *args: str | list[str]) -> None:
+        self.clear_views()
+        self.append_views(*args)
+
+    def set_operators(self, *args) -> None:
+        self.clear_operators()
+        self.append_operators(*args)
+
+    def set_vars(self, **kwargs) -> None:
+        self.clear_vars()
+        self.append_vars(**kwargs)
+    
+    def set_description(self, desc: str) -> None:
+        self._description = desc
+
+    def clear_operators(self) -> None:
+        self.operators = []
+
+    def clear_views(self):
+        self._views = []
+
+    def clear_vars(self):
+        self._vars = {}
+
+    def append_operators(self, *args) -> None:
+        for i in args:
+            if isinstance(i, list):
+                self.append_operators(*i)
             else:
-                source = self.config_path        
-        if not dest:
-            if not self.temp_config_path:
-                raise ValueError("Missing destination config path!")
+                self.operators.append(i)
+
+    def append_views(self, *args: str | list[str]) -> None:
+        for i in args:
+            if isinstance(i, list):
+                self.append_views(*i)
             else:
-                dest = self.temp_config_path
-        config = OCIO.Config.CreateFromFile(source)
-        self._ocio_config = config
-        for k, v in self.ocio_environment.items():
-            config.addEnvironmentVar(k, v)
-        if self.ocio_description:
-            desc = {
-                self._AYON_DESC_KEY: self.ocio_description
-            }
-            config.setDescription(str(desc))
-        search_paths = []
-        ocio_transforms_list = []
-        view_name = f"{self.context}"
-        for obj in self.transform_list:
-            class_name = getattr(OCIO, obj.__class__.__name__)
-            props = vars(obj)
+                self._views.append(i)
+
+    def append_vars(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            self._vars[k] = v
+    
+    def get_config_path(self) -> str:
+        return self._dest_path
+
+    def get_description_from_config(self) -> str:
+        return self._ocio_config.getDescription()
+    
+    def _get_search_paths_from_config(self) -> list:
+        return list(self._ocio_config.getSearchPaths())
+    
+    def _sanitize_search_paths(self, paths: list) -> list:
+        real_paths = []
+        for p in paths:
+            computed_path = Path(Path(self.config_path).parent, p).resolve()
+            if computed_path.is_file():
+                computed_path = Path(computed_path.parent).resolve()
+                real_paths.append(computed_path.as_posix())
+            elif computed_path.is_dir():
+                computed_path = computed_path.resolve()
+                real_paths.append(computed_path.as_posix())
+            else:
+                continue
+        real_paths = list(set(real_paths))
+        self._search_paths = real_paths
+        return real_paths
+    
+    def _get_absolute_search_paths_from_ocio(self) -> list:
+        paths = self._get_search_paths_from_config()
+        for op in self._ocio_transforms:
+            try:
+                paths.append(op.getSrc())
+            except:
+                continue
+        return self._sanitize_search_paths(paths)
+    
+    def _get_absolute_search_paths(self) -> list:
+        paths = self._get_search_paths_from_config()
+        for op in self.operators:
+            if hasattr(op, "src"):
+                paths.append(op.src)
+        return self._sanitize_search_paths(paths)
+
+    def _read_config(self) -> None:
+        self._ocio_config = OCIO.Config.CreateFromFile(self.config_path)
+
+    def load_config_from_file(self, src: str) -> None:
+        self.config_path = src
+        self._read_config()
+
+    def process_config(self) -> None:
+        for op in self.operators:
+            props = vars(op)
             if props.get("direction"):
                 props["direction"] = OCIO.TransformDirection.TRANSFORM_DIR_INVERSE
             else:
                 props["direction"] = OCIO.TransformDirection.TRANSFORM_DIR_FORWARD
-            ocio_transforms_list.append(class_name(**props))
-        for p in config.getSearchPaths():
-            search_paths.append(
-                os.path.join(
-                    os.path.dirname(os.path.abspath(source)),
-                    p
-                ).replace("\\", "/")
-            )
-        for ctd in ocio_transforms_list:
-            try:
-                ctd_source = ctd.getSrc()
-                if ctd_source:
-                    search_paths.append(
-                        os.path.dirname(ctd_source)
-                    )
-            except:
-                continue
-        search_paths = list(dict.fromkeys(
-            [x for x in search_paths.copy() if x != ""])
+            ocio_class_name = getattr(OCIO, op.__class__.__name__)
+            if props.get("src"):
+                op_path = Path(props["src"]).resolve()
+                if op_path.is_file():
+                    props["src"] = op_path.name
+            self._ocio_transforms.append(ocio_class_name(**props))
+        for k, v in self._vars.items():
+            self._ocio_config.addEnvironmentVar(k, v)
+        self._ocio_config.setDescription(self._description)
+        group_transform = OCIO.GroupTransform(self._ocio_transforms)
+        look_transform = OCIO.ColorSpaceTransform(
+            src = self.working_space,
+            dst = self.context
         )
-        for i, sp in enumerate(search_paths):
-            search_paths[i] = f"  - {sp}"
-        
-        group = OCIO.GroupTransform(ocio_transforms_list)
-
         cspace = OCIO.ColorSpace()
-        cspace.setName(view_name)
-        cspace.setFamily(self.ocio_family)
-        cspace.setTransform(group, OCIO.ColorSpaceDirection.COLORSPACE_DIR_FROM_REFERENCE)
-        
+        cspace.setName(self.context)
+        cspace.setFamily(self.family)
+        cspace.setTransform(
+            group_transform,
+            OCIO.ColorSpaceDirection.COLORSPACE_DIR_FROM_REFERENCE
+        )
         look = OCIO.Look(
-            name = view_name,
+            name = self.context,
             processSpace = self.working_space,
-            transform = OCIO.ColorSpaceTransform(
-                src = self.working_space,
-                dst = view_name
-            )
+            transform = look_transform
         )
-
-        config.addColorSpace(cspace)
-        config.addLook(look)
-        config.addDisplayView(
-            "ACES",
-            view_name,
+        self._ocio_config.addColorSpace(cspace)
+        self._ocio_config.addLook(look)
+        self._ocio_config.addDisplayView(
+            self._ocio_config.getActiveDisplays().split(",")[0],
+            self.context,
             self.working_space,
-            looks = view_name
+            looks = self.context
         )
-        if not self.active_views:
-            config.setActiveViews(
-                f"{view_name},{config.getActiveViews()}"
-            )
+        if not self._views:
+            self._ocio_config.setActiveViews(
+                "{},{}".format(self.context, self._ocio_config.getActiveViews()))
         else:
-            config.setActiveViews(
-                f"{view_name},{self.active_views}"
-            )
-        config.validate()
-        config_lines = config.serialize().splitlines()
-        for i, l in enumerate(config_lines.copy()):
+            self._ocio_config.setActiveViews(
+                "{},{}".format(self.context, ",".join(self._views)))
+        self._ocio_config.validate()
+
+    def write_config(self, dest: str = None) -> str:
+        config_lines = self._ocio_config.serialize().splitlines()
+        search_paths = self._search_paths
+        for i, sp in enumerate(search_paths):
+            search_paths[i] = "  - {}".format(sp)
+        for i, l in enumerate(copy.deepcopy(config_lines)):
             if l.find("search_path") >= 0:
-                config_lines[i] = "search_path:"
+                config_lines[i] = "\nsearch_path:"
                 for idx, sp in enumerate(search_paths):
                     config_lines.insert(i+idx+1, sp)
                 config_lines.insert(i+len(search_paths)+1, "")
                 break
         final_config = "\n".join(config_lines)
-        with open(dest, "w") as f:
+        dest = Path(dest).resolve()
+        dest.parent.mkdir(exist_ok=True, parents=True)
+        with open(dest.as_posix(), "w") as f:
             f.write(final_config)
-        return dest
+        return final_config
 
-    def compute_color_cmd(self,
-                          colorconfig: str = None,
-                          from_colorspace: str = None,
-                          to_colorspace: str = None,
-                          context: str = None) -> list:
-        if not colorconfig:
-            colorconfig = self.temp_config_path
-        if not from_colorspace:
-            from_colorspace = self.working_space
-        if not to_colorspace:
-            to_colorspace = self.working_space
-        if not context:
-            context = self.context
-        cmd = ["--colorconfig"]
-        cmd.append(colorconfig)
-        cmd.append(f"--ociolook:from={from_colorspace}:to={to_colorspace}")
-        cmd.append(context)
+    def create_config(self, dest: str = None) -> None:
+        if not dest: dest = Path(self.staging_dir, self._ocio_config_name)
+        dest = Path(dest).resolve().as_posix()
+        self.load_config_from_file(Path(self.config_path).resolve().as_posix())
+        self._get_absolute_search_paths()
+        self.process_config()
+        self.write_config(dest)
+        self._dest_path = dest
+        return dest
+    
+    def get_oiiotool_cmd(self) -> list:
+        cmd = [
+            "--colorconfig",
+            self._dest_path,
+            "--ociolook:from=\"{}\":to=\"{}\"".format(self.working_space,
+                                                      self.working_space),
+            self.context
+        ]
         return cmd
     
 
 @dataclass
-class RepoTransformProcessor:
-    transform_list: list[ops.RepoTransform] = field(default_factory= lambda: list([]))
+class RepoProcessor:
+    operators: list = field(default_factory = lambda: list([]))
     source_width: int = None
     source_height: int = None
     dest_width: int = None
     dest_height: int = None
-    _raw_matrix: list[list[float]] = field(default_factory= lambda: list([list([])]))
-    _class_search_key = "class"
+    
+    def __post_init__(self):
+         self._raw_matrix: list[list[float]] = list([list([])])
+         self._class_search_key = "class"
+
+    def set_source_size(self, width: int, height: int) -> None:
+        self.source_width = width
+        self.source_height = height
+
+    def set_destination_size(self, width: int, height: int) -> None:
+        self.dest_width = width
+        self.dest_height = height
 
     def get_raw_matrix(self) -> list[list[float]]:
         return self._raw_matrix
 
-    def add_transform(self, *args) -> None:
-        arglist = []
+    def add_operators(self, *args) -> None:
         for a in args:
             if isinstance(a, list):
-                for b in a:
-                    arglist.append(b)
+                self.add_operators(*a)
             else:
-                arglist.append(a)
-        for obj in arglist:
-            if isinstance(obj, ops.RepoTransform):
-                self.transform_list.append(obj)
-            else:
-                obj.pop(self._class_search_key)
-                self.transform_list.append(
-                    ops.RepoTransform(**obj)
-                )
-
-    def clear_transforms(self) -> None:
-        self.transform_list = []
-
-    def zero_matrix(self) -> list[list[float]]:
-        return [[0.0 for i in range(3)] for j in range(3)]
-
-    def identity_matrix(self) -> list[list[float]]:
-        return self.translate_matrix([0.0, 0.0])
-
-    def translate_matrix(self,
-                         t: list[float]) -> list[list[float]]:
-        return [
-            [1.0, 0.0, t[0]],
-            [0.0, 1.0, t[1]],
-            [0.0, 0.0, 1.0]
-        ]
-
-    def rotate_matrix(self,
-                      r: float) -> list[list[float]]:
-        rad = math.radians(r)
-        cos = math.cos(rad)
-        sin = math.sin(rad)
-        return [
-            [cos, -sin, 0.0],
-            [sin, cos, 0.0],
-            [0.0, 0.0, 1.0]
-        ]
-
-    def scale_matrix(self,
-                     s: list[float]) -> list[list[float]]:
-        return [
-            [s[0], 0.0, 0.0],
-            [0.0, s[1], 0.0],
-            [0.0, 0.0, 1.0]
-        ]
-
-    def mirror_matrix(self,
-                      x: bool = False) -> list[list[float]]:
-        dir = [1.0, -1.0] if not x else [-1.0, 1.0]
-        return self.scale_matrix(dir)
-
-    def mult_matrix(self,
-                    m1: list[list[float]],
-                    m2: list[list[float]]) -> list[list[float]]:
-        return [[sum(a * b for a, b in zip(m1_row, m2_col)) for m2_col in zip(*m2)] for m1_row in m1]
-
-    def mult_matrix_vector(self,
-                           m: list[list[float]],
-                           v: list[float]) -> list[float]:
-        result = [0.0, 0.0, 0.0]
-        for i in range(len(m)):
-            for j in range(len(v)):
-                result[i] += m[i][j] * v[j]
-        return result
-
-    def flip_matrix(self,
-                    w: float) -> list[list[float]]:
-        result = self.identity_matrix()
-        chain = [
-            self.translate_matrix([w, 0.0]),
-            self.mirror_matrix(x = True)
-        ]
-        for m in chain:
-            result = self.mult_matrix(result, m)
-        return result
-
-    def flop_matrix(self,
-                    h: float) -> list[list[float]]:
-        result = self.identity_matrix()
-        chain = [
-            self.translate_matrix([0.0, h]),
-            self.mirror_matrix()
-        ]
-        for m in chain:
-            result = self.mult_matrix(result, m)
-        return result
-
-    def transpose_matrix(self,
-                         m: list[list[float]]) -> list[list[float]]:
-        res = self.identity_matrix()
-        for i in range(len(m)):
-            for j in range(len(m[0])):
-                res[i][j] = m[j][i]
-        return res
-
-    def matrix_to_44(self,
-                     m: list[list[float]]) -> list[list[float]]:
-        result = m
-        result[0].insert(2, 0.0)
-        result[1].insert(2, 0.0)
-        result[2].insert(2, 0.0)
-        result.insert(2, [0.0, 0.0, 1.0, 0.0])
-        return result
-
-    def matrix_to_list(self,
-                       m: list[list[float]]) -> list[float]:
-        result = []
-        for i in m:
-            for j in i:
-                result.append(str(j))
-        return result
-
-    def matrix_to_csv(self,
-                      m: list[list[float]]) -> str:
-        l = []
-        for i in m:
-            for k in i:
-                l.append(str(k))
-        return ",".join(l)
-
-    def matrix_to_cornerpin(self,
-                            m: list[list[float]],
-                            origin_upperleft: bool = True) -> list:
-        w = self.source_width
-        h = self.source_height
-        cornerpin = []
-        if origin_upperleft:
-            corners = [[0, h, 1], [w, h, 1], [0, 0, 1], [w, 0, 1]]
-        else:
-            corners = [[0, 0, 1], [w, 0, 1], [0, h, 1], [w, h, 1]]
-        transformed_corners = [self.mult_matrix_vector(m, corner) for corner in corners]
-        transformed_corners = [[corner[0] / corner[2], corner[1] / corner[2]] for corner in transformed_corners]
-        for i, corner in enumerate(transformed_corners):
-            x, y = corner
-            cornerpin.extend([x,y])
-        return cornerpin
-
-    def get_matrix(self,
-                   t: list[float],
-                   r: float,
-                   s: list[float],
-                   c: list[float]) -> list[list[float]]:
-        c_inv = [-c[0], -c[1]]
-        center = self.translate_matrix(c)
-        center_inv = self.translate_matrix(c_inv)
-        translate = self.translate_matrix(t)
-        rotate = self.rotate_matrix(r)
-        scale = self.scale_matrix(s)
-        result = self.mult_matrix(translate, center)
-        result = self.mult_matrix(result, scale)
-        result = self.mult_matrix(result, rotate)
-        result = self.mult_matrix(result, center_inv)
-        return result  
+                self.operators.append(a)
 
     def get_matrix_chained(self,
                            flip: bool = False,
                            flop: bool = True,
                            reverse_chain: bool = True) -> str:
         chain = []
-        tlist = self.transform_list
+        tlist = self.operators
         if reverse_chain:
             tlist.reverse()
         if flip:
-            chain.append(self.flip_matrix(self.source_width))
+            chain.append(utils.flip_matrix(self.source_width))
         if flop:
-            chain.append(self.flop_matrix(self.source_height))
+            chain.append(utils.flop_matrix(self.source_height))
         for xform in tlist:
-            chain.append(
-                self.get_matrix(
-                    xform.translate,
-                    xform.rotate,
-                    xform.scale,
-                    xform.center)
-            )
+            chain.append(utils.calculate_matrix(t = xform.translate,
+                                                r = xform.rotate,
+                                                s = xform.scale,
+                                                c = xform.center))
         if flop:
-            chain.append(self.flop_matrix(self.source_height))
+            chain.append(utils.flop_matrix(self.source_height))
         if flip:
-            chain.append(self.flip_matrix(self.source_width))
-        result = self.identity_matrix()
+            chain.append(utils.flip_matrix(self.source_width))
+        result = utils.identity_matrix()
         for m in chain:
-            result = self.mult_matrix(result, m)
+            result = utils.mult_matrix(result, m)
         self._raw_matrix = result
         return result
 
     def get_cornerpin_data(self,
                            matrix: list[list[float]]) -> list:
-        cp = self.matrix_to_cornerpin(
-            matrix,
-            self.source_width,
-            self.source_height,
-            origin_upperleft=False
-        )
+        cp = utils.matrix_to_cornerpin(m = matrix,
+                                       w = self.source_width,
+                                       h = self.source_height,
+                                       origin_upperleft = False)
         return cp
 
-    def compute_repotransform_cmd(self) -> list:
+    def get_oiiotool_cmd(self) -> list:
 
         if not self.source_width:
             raise ValueError(f"Missing source width!")
@@ -531,8 +475,8 @@ class RepoTransformProcessor:
             raise ValueError(f"Missing destination height!")
         
         matrix = self.get_matrix_chained()
-        matrix_tr = self.transpose_matrix(matrix)
-        warp_cmd = self.matrix_to_csv(matrix_tr)
+        matrix_tr = utils.transpose_matrix(matrix)
+        warp_cmd = utils.matrix_to_csv(matrix_tr)
         
         src_aspect = self.source_width /self.source_height
         dest_aspect = self.dest_width / self.dest_height
@@ -549,47 +493,103 @@ class RepoTransformProcessor:
         elif src_aspect < dest_aspect:
             fitted_width = int(self.source_height * dest_aspect)
             x_offset = int((fitted_width-self.source_width)/2)
+        
+        cropped_area = "{}x{}-{}-{}".format(fitted_width, fitted_height, x_offset, y_offset)
+        dest_size = "{}x{}".format(self.dest_width, self.dest_height)
 
-        cmd = []
-
-        cmd.extend([
+        cmd = [
             "--warp:filter=cubic:recompute_roi=1",
             warp_cmd,
             "--crop",
-            f"{fitted_width}x{fitted_height}-{x_offset}-{y_offset}",
+            cropped_area,
             "--fullsize",
-            f"{fitted_width}x{fitted_height}-{x_offset}-{y_offset}",
-            #"--fullpixels",
+            cropped_area,
             "--resize",
-            f"{self.dest_width}x{self.dest_height}"
-        ])
+            dest_size
+        ]
 
         return cmd
 
 
 @dataclass
-class SlateProcessor():
-    slates: list = field(default_factory=lambda: list([]))
-    thumbs: list = field(default_factory=lambda: list([]))
-    charts: list = field(default_factory=lambda: list([]))
+class SlateProcessor:
     data: dict = field(default_factory = lambda: dict({}))
-    width: int = None
-    height: int = None
+    width: int = 1920
+    height: int = 1080
     staging_dir: str = None
     slate_template_path: str = None
-    _staged_template_path: str = None
-    _driver: webdriver.Chrome = None
-    _thumb_class_name = "thumb"
-    _chart_class_name = "chart"
+    source_files: list = field(default_factory = lambda: list([]))
+    is_source_linear: bool = True
 
     def __post_init__(self):
+        if not self.staging_dir:
+            self.staging_dir = utils.get_staging_dir()
+        self._thumbs = list([])
+        self._charts = list([])
+        self._thumb_class_name: str = "thumb"
+        self._chart_class_name: str = "chart"
+        self._template_staging_dirname: str = "slate_staging"
+        self._slate_staged_path: str = None
+        self._slate_computed: str = None
+        self._slate_base_image_path: str = None
+        self._remove_missing_parents: bool = True
+        self._slate_base_name = "slate_base.png"
         options = Options()
-        options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
+        # THIS WILL NEED TO BE SWITCHED TO NEW MODE, BUT THERE ARE BUGS.
+        # WE SHOULD BE FINE FOR A COUPLE OF YEARS UNTIL DEPRECATION.
+        # --headless=new works only with 100% display size,
+        # if you use a different display scaling (for hidpi monitors)
+        # the resizing of the screenshot will not work.
+        options.add_argument("--headless")
         options.add_argument("--hide-scrollbars")
         options.add_argument("--show-capture=no")
+        options.add_argument("--log-level=OFF")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-gpu')
         options.add_experimental_option("excludeSwitches", ["enable-logging"])
-        self._driver = webdriver.Chrome(options=options)
+        self._driver = webdriver.Chrome(options = options)
+
+    def get_staging_dir(self) -> str:
+        return self.staging_dir
+    
+    def get_thumb_placeholder(self) -> str:
+        self._driver.get(self._slate_staged_path)
+        thumb_placeholder = self._driver.find_elements(By.CLASS_NAME, self._thumb_class_name)[0]
+        src = thumb_placeholder.get_attribute("src").replace("file:///", "")
+        return src
+    
+    def set_slate_base_name(self, name: str) -> None:
+        self._slate_base_name = "{}.png".format(name)
+
+    def set_remove_missing_parent(self, remove: bool = True) -> None:
+        self._remove_missing_parents = remove
+
+    def set_linear_working_space(self, is_linear: bool) -> None:
+        self.is_source_linear = is_linear
+
+    def set_source_files(self, files: list) -> None:
+        self.source_files = files
+
+    def set_template_path(self, path: str) -> None:
+        self.slate_template_path = Path(path).resolve().as_posix()
+    
+    def set_staging_dir(self, path: str) -> None:
+        self.staging_dir = Path(path).resolve().as_posix()
+    
+    def set_data(self, data: dict) -> None:
+        self.data = data
+
+    def set_size(self, width: int, height: int) -> None:
+        self.width = width
+        self.height = height
+
+    def set_thumb_class_name(self, name: str) -> None:
+        self._thumb_class_name = name
+    
+    def set_chart_class_name(self, name: str) -> None:
+        self._chart_class_name = name
 
     def set_viewport_size(self, width: int, height: int) -> None:
         window_size = self._driver.execute_script("""
@@ -598,97 +598,53 @@ class SlateProcessor():
             """, width, height)
         self._driver.set_window_size(*window_size)
     
-    def format_slate(self,
-                     data: dict = None,
-                     slate_template_path: str = None,
-                     staging_dir: str = None) -> str:
+    def stage_slate(self) -> str:
+        if not self.staging_dir:
+            raise ValueError("Missing staging dir!")
+        if not self.slate_template_path:
+            raise ValueError("Missing slate template path!")
+        slate_path = Path(self.slate_template_path).resolve()
+        slate_dir = slate_path.parent
+        slate_name = slate_path.name
+        slate_staging_dir = Path(self.staging_dir, self._template_staging_dirname).resolve()
+        slate_staged_path = Path(slate_staging_dir, slate_name).resolve()
+        shutil.rmtree(slate_staging_dir.as_posix(), ignore_errors = True)
+        shutil.copytree(src = slate_dir.as_posix(),
+                        dst = slate_staging_dir.as_posix())
+        self._slate_staged_path = slate_staged_path.as_posix()
+        return self._slate_staged_path
 
-        if not data:
-            if not self.data:
-                raise ValueError("Missing subst_data to format template!")
-            else:
-                data = self.data
-        
-        if not slate_template_path:
-            if not self.slate_template_path:
-                raise ValueError("Missing slate template path!")
-            else:
-                slate_template_path = self.slate_template_path
-        
-        if not staging_dir:
-            if not self.staging_dir:
-                raise ValueError("Missing staging dir!")
-            else:
-                staging_dir = self.staging_dir
-        
-        slate_staging_path = os.path.join(
-            self.staging_dir,
-            os.path.basename(
-                os.path.dirname(slate_template_path)
-            ),
-            os.path.basename(slate_template_path)
-        )
+    def format_slate(self) -> None:
+        if not self.data:
+            raise ValueError("Missing subst_data to format template!")
+        with open(self._slate_staged_path, "r+") as f:
+            formatted_slate = f.read().format_map(
+                utils.format_dict(self.data))
+            f.seek(0)
+            f.write(formatted_slate)
+            f.truncate()
+        self._driver.get(self._slate_staged_path)
+        elements = self._driver.find_elements(By.XPATH,
+            "//*[contains(text(),'{}')]".format(utils.format_dict._placeholder))
+        for el in elements:
+            self._driver.execute_script("""
+                var element = arguments[0];
+                element.style.display = 'none';                  
+                """, el)
+            if self._remove_missing_parents:
+                parent = el.find_element(By.XPATH, "..")
+                self._driver.execute_script("""
+                    var element = arguments[0];
+                    element.style.display = 'none';                  
+                    """, parent)
+        with open(self._slate_staged_path, "w") as f:
+            f.seek(0)
+            f.write(self._driver.page_source)
+            f.truncate()
 
-        with open(slate_template_path, "r") as p:
-            formatted_slate = p.read().format_map(format_dict(data))
-        
-        dest_dir = os.path.dirname(slate_staging_path)
-
-        if os.path.isdir(dest_dir):
-            self.clean_staged_files(dest_dir)
-        
-        shutil.copytree(
-            src=os.path.dirname(slate_template_path),
-            dst=dest_dir
-        )
-
-        with open(slate_staging_path, "w") as p:
-            p.write(formatted_slate)
-
-        self._staged_template_path = slate_staging_path
-
-        return formatted_slate
-
-    def render_slate(self,
-                     output_path: str,
-                     slate_template_path: str = None,
-                     width: int = None,
-                     height: int = None) -> dict:
-        
-        if not output_path:
-            raise ValueError("No output path specified!")
-
-        if not slate_template_path:
-            if not self._staged_template_path:
-                raise ValueError("Missing formatted template!")
-            else:
-                slate_template_path = self._staged_template_path
-        
-        if not width:
-            if not self.width:
-                raise ValueError("Missing width!")
-            else:
-                width = self.width
-
-        if not height:
-            if not self.height:
-                raise ValueError("Missing height!")
-            else:
-                height = self.height
-
-        self._driver.get(slate_template_path)
-        self.set_viewport_size(width, height)
-        
-        self.slates.append(
-            utils.ImageInfo(
-                filename = output_path,
-                data_width = width,
-                data_height = height,
-                data_origin_x = 0,
-                data_origin_y = 0
-            )
-        )
-
+    def setup_base_slate(self) -> str:
+        self._driver.get(self._slate_staged_path)
+        self.set_viewport_size(self.width, self.height)
         thumbs = self._driver.find_elements(By.CLASS_NAME, self._thumb_class_name)
         for t in thumbs:
             src_path = t.get_attribute("src")
@@ -699,13 +655,13 @@ class SlateProcessor():
                     var element = arguments[0];
                     element.style.height = '{}px'
                     """.format(thumb_height), t)
-                self.thumbs.append(
+                self._thumbs.append(
                     utils.ImageInfo(
                         filename = src_path.replace("file:///", ""),
-                        data_origin_x = t.location["x"],
-                        data_origin_y = t.location["y"],
-                        data_width = t.size["width"],
-                        data_height = thumb_height
+                        origin_x = t.location["x"],
+                        origin_y = t.location["y"],
+                        width = t.size["width"],
+                        height = thumb_height
                     )
                 )
         for t in thumbs:
@@ -713,18 +669,17 @@ class SlateProcessor():
                 var element = arguments[0];
                 element.parentNode.removeChild(element);
                 """, t)
-        
         charts = self._driver.find_elements(By.CLASS_NAME, self._chart_class_name)
         for c in charts:
             src_path = c.get_attribute("src")
             if src_path:
-                self.charts.append(
+                self._charts.append(
                     utils.ImageInfo(
                         filename = src_path.replace("file:///", ""),
-                        data_origin_x = c.location["x"],
-                        data_origin_y = c.location["y"],
-                        data_width = c.size["width"],
-                        data_height = c.size["height"]
+                        origin_x = c.location["x"],
+                        origin_y = c.location["y"],
+                        width = c.size["width"],
+                        height = c.size["height"]
                     )
                 )
         for c in charts:
@@ -732,64 +687,82 @@ class SlateProcessor():
                 var element = arguments[0];
                 element.parentNode.removeChild(element);
                 """, c)
-
-        self._driver.save_screenshot(output_path)
-
+        template_staged_path = Path(self._slate_staged_path).resolve().parent
+        slate_base_path = Path(
+            template_staged_path,
+            self._slate_base_name
+        ).resolve()
+        self._driver.save_screenshot(slate_base_path.as_posix())
         self._driver.quit()
+        self._slate_base_image_path = slate_base_path
+        return slate_base_path
 
+    def set_thumbnail_sources(self) -> None:
+        thumb_steps = int(len(self.source_files) / (len(self._thumbs) + 1))
+        for i, t in enumerate(self._thumbs):
+            self._thumbs[i].filename = Path(self.source_files[thumb_steps * (i + 1)]).resolve().as_posix()
+
+    def create_base_slate(self) -> None:
+        self.stage_slate()
+        self.format_slate()
+        # thumb_info = utils.read_image_info(self.get_thumb_placeholder())
+        # thumb_cmd = [
+        #     "oiiotool",
+        #     "-i", thumb_info.filename,
+        #     "-resize", "{}x{}".format(self.width, self.height),
+        #     "-o", thumb_info.filename
+        # ]
+        # subprocess.run(thumb_cmd)
+        self.setup_base_slate()
+        self.set_thumbnail_sources()
+
+    def get_oiiotool_cmd(self) -> list:
         label = "base"
-
-        cmd = ["oiiotool"]
-        cmd.extend([
-            "-i", output_path,
+        cmd = [
+            "-i", Path(self._slate_base_image_path).resolve().as_posix(),
             "--colorconvert", "sRGB", "linear",
             "--ch", "R,G,B,A=1.0",
             "--label", "slate",
-            "--create", f"{self.width}x{self.height}", "4",
+            "--create", "{}x{}".format(self.width, self.height), "4",
             "--ch", "R,G,B,A=0.0",
             "--label", label
-        ])
-        for i, t in enumerate(self.thumbs):
+        ]
+        for i, t in enumerate(self._thumbs):
             if i > 0:
                 label = "imgs"
             cmd.extend([
-                "-i", t.filename,
+                "-i", t.filename
+            ])
+            if not self.is_source_linear:
+                cmd.extend(["--colorconvert", "sRGB", "linear"])
+            cmd.extend([
                 "--ch", "R,G,B,A=1.0",
-                "--resample", f"{t.data_width}x{t.data_height}+{t.data_origin_x}+{t.data_origin_y}",
+                "--resample", "{}x{}+{}+{}".format(t.width,
+                                                   t.height,
+                                                   t.origin_x,
+                                                   t.origin_y),
                 label, "--over",
                 "--label", "imgs"
             ])
-        for i, c in enumerate(self.charts):
+        for i, c in enumerate(self._charts):
             cmd.extend([
                 "-i", c.filename,
                 "--colorconvert", "sRGB", "linear",
                 "--ch", "R,G,B,A=1.0",
-                "--resample", f"{c.data_width}x{c.data_height}+{c.data_origin_x}+{c.data_origin_y}",
+                "--resample", "{}x{}+{}+{}".format(c.width,
+                                                   c.height,
+                                                   c.origin_x,
+                                                   c.origin_y),
                 "imgs", "--over",
                 "--label", "imgs"
             ])
         cmd.extend([
-            "-o", "results/thumb.exr",
             "slate", "--over",
             "--label", "complete_slate",
-            "-o", "results/test.exr",
-            "--colorconvert", "linear", "sRGB",
-            "--ch", "R,G,B",
-            "-o", os.path.join(os.path.dirname(output_path), "test.png")
         ])
+        if not self.is_source_linear:
+            cmd.extend([
+                "--colorconvert", "linear", "sRGB",
+            ])
 
-        subprocess.run(cmd)
-
-        return {
-            "slates": self.slates,
-            "thumbs": self.thumbs,
-            "charts": self.charts
-        }
-
-    def clean_staged_files(self, slate_template_path: str = None) -> None:
-        if not slate_template_path:
-            if not self._staged_template_path:
-                raise ValueError("Can't determine staged slate path!")
-            else:
-                slate_template_path = self._staged_template_path
-        shutil.rmtree(os.path.dirname(slate_template_path))
+        return cmd

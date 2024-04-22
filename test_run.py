@@ -1,71 +1,91 @@
 import os
+import json
 
-import lablib
+from lablib import (
+    operators,
+    processors,
+    renderers,
+    utils
+)
 
-
-# Constants
+# System Constants
 FFMPEG_PATH = "vendor/bin/ffmpeg/windows/bin"
 OIIO_PATH = "vendor/bin/oiio/windows"
 OCIO_PATH = "vendor/bin/ocioconfig/OpenColorIOConfigs/aces_1.2/config.ocio"
-INPUT_PATH = "resources/public/plateMain/v000/BLD_010_0010_plateMain_v000.1001.exr"
+
+# Project Constants
+SOURCE_DIR = "resources/public/plateMain/v000"
+DATA_PATH = "resources/public/mock_data.json"
 EFFECT_PATH = "resources/public/effectPlateMain/v000/BLD_010_0010_effectPlateMain_v000.json"
-OUTPUT_PATH = "results/BLD_010_0010_resultMain_v000.1001.png"
-OUTPUT_CONFIG = "results/config.ocio"
+SLATE_TEMPLATE_PATH = "templates/slates/slate_generic/slate_generic.html"
+STAGING_DIR = "results"
 OUTPUT_WIDTH = 1920
 OUTPUT_HEIGHT = 1080
-CONTEXT = "BLD_010_0010"
 
-# Env setup
+# Env Setup
 script_location = os.path.dirname(os.path.realpath(__file__))
 os.environ["PATH"] += os.pathsep + os.path.join(script_location, FFMPEG_PATH)
 os.environ["PATH"] += os.pathsep + os.path.join(script_location, OIIO_PATH)
 os.environ["OCIO"] = OCIO_PATH
 
+# Get data from Asset
+with open(DATA_PATH, "r") as f:
+    working_data = json.loads(f.read())
 
-filepath = os.path.abspath(INPUT_PATH).replace("\\", "/")
+# Setup SequenceInfo operator
+main_seq = operators.SequenceInfo().compute_longest(SOURCE_DIR)
 
-# Read Image Info
-img_info = lablib.utils.read_image_info(filepath)
+# Read image info from first image in sequence
+main_seq_info = utils.read_image_info(main_seq.frames[0])
 
-# Compute Openpype/AYON effect.json
-epr = lablib.processors.EffectsFileProcessor(input_file=EFFECT_PATH)
-effect_data = epr.get_data()
+# Compute Effects file from AYON
+epr = processors.EffectsFileProcessor(EFFECT_PATH)
 
-# Compute color transforms and build ocio config
-cpr = lablib.processors.ColorTransformProcessor(
-    context = CONTEXT,
+# Compute color transformations
+cpr = processors.ColorProcessor(
+    operators=epr.color_operators,
     config_path = OCIO_PATH,
-    temp_config_path = OUTPUT_CONFIG,
-    active_views = "sRGB, Rec.709, Log, Raw",
-    ocio_description={
-        "parent_id": "whatever_id_here",
-        "parent_asset": CONTEXT,
-        "parent_subset": "effectPlateMain",
-        "parent_version": "0"
-    },
-    ocio_environment={
-        "TEST_ENV": "test_env_string"
-    }
+    staging_dir = STAGING_DIR,
+    context = working_data["asset"],
+    family = working_data["project"]["code"],
+    views = ["sRGB", "Rec.709", "Log", "Raw"]
 )
-cpr.add_transform(effect_data["color"])
 
-# Compute repo transforms
-rpr = lablib.processors.RepoTransformProcessor(
-    source_width = img_info.display_width,
-    source_height = img_info.display_height,
+# Compute repo transformations
+rpr = processors.RepoProcessor(
+    operators = epr.repo_operators,
+    source_width = main_seq_info.display_width,
+    source_height = main_seq_info.display_height,
     dest_width = OUTPUT_WIDTH,
     dest_height = OUTPUT_HEIGHT
 )
-rpr.add_transform(effect_data["repo"])
 
-# Render Result with Default Renderer
-render = lablib.renderers.DefaultRenderer(
-    color_transform = cpr,
-    repo_transform = rpr
+# Render the sequence
+rend = renderers.DefaultRenderer(
+    color_proc = cpr,
+    repo_proc = rpr,
+    source_sequence = main_seq,
+    staging_dir = STAGING_DIR,
+    format = ".png"
 )
-render.render_oiio(
-    INPUT_PATH,
-    OUTPUT_PATH
+# rend.set_debug(True)
+rend.set_threads(8)
+computed_seq = rend.render()
+
+# Compute slate
+spr = processors.SlateProcessor(
+    data = working_data,
+    width = OUTPUT_WIDTH,
+    height = OUTPUT_HEIGHT,
+    staging_dir = STAGING_DIR,
+    slate_template_path = SLATE_TEMPLATE_PATH,
+    is_source_linear = False
 )
 
-
+# Render the slate
+rend_slate = renderers.DefaultSlateRenderer(
+    slate_proc = spr,
+    source_sequence = computed_seq
+)
+# rend_slate.set_debug(True)
+rend_slate.render()
