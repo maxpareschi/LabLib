@@ -8,7 +8,6 @@ from lablib import (
     utils
 )
 
-
 # System Constants
 FFMPEG_PATH = "vendor/bin/ffmpeg/windows/bin"
 OIIO_PATH = "vendor/bin/oiio/windows"
@@ -61,16 +60,6 @@ rpr = processors.RepoProcessor(
     dest_height = OUTPUT_HEIGHT
 )
 
-# Compute slate
-spr = processors.SlateProcessor(
-    data = working_data,
-    width = OUTPUT_WIDTH,
-    height = OUTPUT_HEIGHT,
-    staging_dir = STAGING_DIR,
-    slate_template_path = SLATE_TEMPLATE_PATH,
-    is_source_linear = False
-)
-
 # Render the sequence
 rend = renderers.DefaultRenderer(
     color_proc = cpr,
@@ -82,6 +71,16 @@ rend = renderers.DefaultRenderer(
 # rend.set_debug(True)
 rend.set_threads(8)
 computed_seq = rend.render()
+
+# Compute slate
+spr = processors.SlateProcessor(
+    data = working_data,
+    width = OUTPUT_WIDTH,
+    height = OUTPUT_HEIGHT,
+    staging_dir = STAGING_DIR,
+    slate_template_path = SLATE_TEMPLATE_PATH,
+    is_source_linear = False
+)
 
 # Render the slate
 rend_slate = renderers.DefaultSlateRenderer(

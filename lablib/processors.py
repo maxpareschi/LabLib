@@ -10,10 +10,10 @@ import os
 import uuid
 import copy
 import shutil
+import subprocess
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 
 import PyOpenColorIO as OCIO
@@ -554,6 +554,12 @@ class SlateProcessor:
     def get_staging_dir(self) -> str:
         return self.staging_dir
     
+    def get_thumb_placeholder(self) -> str:
+        self._driver.get(self._slate_staged_path)
+        thumb_placeholder = self._driver.find_elements(By.CLASS_NAME, self._thumb_class_name)[0]
+        src = thumb_placeholder.get_attribute("src").replace("file:///", "")
+        return src
+    
     def set_slate_base_name(self, name: str) -> None:
         self._slate_base_name = "{}.png".format(name)
 
@@ -603,7 +609,6 @@ class SlateProcessor:
         slate_staging_dir = Path(self.staging_dir, self._template_staging_dirname).resolve()
         slate_staged_path = Path(slate_staging_dir, slate_name).resolve()
         shutil.rmtree(slate_staging_dir.as_posix(), ignore_errors = True)
-        # slate_staging_dir.mkdir(parents = True, exist_ok = True)
         shutil.copytree(src = slate_dir.as_posix(),
                         dst = slate_staging_dir.as_posix())
         self._slate_staged_path = slate_staged_path.as_posix()
@@ -659,10 +664,11 @@ class SlateProcessor:
                         height = thumb_height
                     )
                 )
-                self._driver.execute_script("""
-                    var element = arguments[0];
-                    element.parentNode.removeChild(element);
-                    """, t)
+        for t in thumbs:
+            self._driver.execute_script("""
+                var element = arguments[0];
+                element.parentNode.removeChild(element);
+                """, t)
         charts = self._driver.find_elements(By.CLASS_NAME, self._chart_class_name)
         for c in charts:
             src_path = c.get_attribute("src")
@@ -676,10 +682,11 @@ class SlateProcessor:
                         height = c.size["height"]
                     )
                 )
-                self._driver.execute_script("""
-                    var element = arguments[0];
-                    element.parentNode.removeChild(element);
-                    """, c)
+        for c in charts:
+            self._driver.execute_script("""
+                var element = arguments[0];
+                element.parentNode.removeChild(element);
+                """, c)
         template_staged_path = Path(self._slate_staged_path).resolve().parent
         slate_base_path = Path(
             template_staged_path,
@@ -698,6 +705,14 @@ class SlateProcessor:
     def create_base_slate(self) -> None:
         self.stage_slate()
         self.format_slate()
+        # thumb_info = utils.read_image_info(self.get_thumb_placeholder())
+        # thumb_cmd = [
+        #     "oiiotool",
+        #     "-i", thumb_info.filename,
+        #     "-resize", "{}x{}".format(self.width, self.height),
+        #     "-o", thumb_info.filename
+        # ]
+        # subprocess.run(thumb_cmd)
         self.setup_base_slate()
         self.set_thumbnail_sources()
 

@@ -189,7 +189,7 @@ class DefaultSlateRenderer:
         cmd.extend([
             "--ch", "R,G,B",
             "--attrib:type=timecode",
-            "smpte:TimeCode", timecode
+            "smpte:TimeCode", "'{}'".format(timecode.replace("\"", ""))
         ])
         if self._debug:
             cmd.extend([
