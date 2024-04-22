@@ -1,9 +1,12 @@
 import os
 import json
 
-import clique
-
-import lablib
+from lablib import (
+    operators,
+    processors,
+    renderers,
+    utils
+)
 
 
 # System Constants
@@ -31,48 +34,26 @@ with open(DATA_PATH, "r") as f:
     working_data = json.loads(f.read())
 
 # Setup SequenceInfo operator
-# IMPORTANT: if you fill the constructor by yourself you need to adhere
-# to clique output: head is always with a trailing dot, tail is always
-# with a leading dot. This is to have separators baked in and also
-# have a clean number to use or derive.
-main_seq = lablib.operators.SequenceInfo()
-if len(os.listdir(SOURCE_DIR)) > 1:
-    # We want just a single sequence without any other file
-    # What needs to be derived is just a single clique.Collection object
-    # to use the compute method in SequenceInfo. Otherwise you can
-    # fill SequenceInfo by hand.
-    working_sequence = clique.assemble(
-        os.listdir(SOURCE_DIR),
-        patterns = [clique.PATTERNS["frames"]],
-        minimum_items = working_data["frameEndHandle"] - working_data["frameStartHandle"]
-    )[0][0]
-    main_seq.compute(working_sequence, SOURCE_DIR)
-else:
-    main_seq.frames = ["D:/DEV/LabLib/resources/public/plateMain/v000/BLD_010_0010_plateMain_v000.1001.exr"]
-    main_seq.frame_start = 1001
-    main_seq.frame_end = 1001
-    main_seq.head = "BLD_010_0010_plateMain_v000."
-    main_seq.tail = ".exr"
-    main_seq.padding = 4
-    main_seq.hash_string = "D:/DEV/LabLib/resources/public/plateMain/v000/BLD_010_0010_plateMain_v000.#.exr"
-    main_seq.format_string = "D:/DEV/LabLib/resources/public/plateMain/v000/BLD_010_0010_plateMain_v000.%04d.exr"
+main_seq = operators.SequenceInfo().compute_longest(SOURCE_DIR)
 
 # Read image info from first image in sequence
-main_seq_info = lablib.utils.read_image_info(main_seq.frames[0])
+main_seq_info = utils.read_image_info(main_seq.frames[0])
+
+# Compute Effects file from AYON
+epr = processors.EffectsFileProcessor(EFFECT_PATH)
 
 # Compute color transformations
-epr = lablib.processors.EffectsFileProcessor(EFFECT_PATH)
-cpr = lablib.processors.ColorProcessor(
+cpr = processors.ColorProcessor(
     operators=epr.color_operators,
-    config_path=OCIO_PATH,
-    staging_dir=STAGING_DIR,
-    context=working_data["asset"],
-    family=working_data["project"]["code"],
+    config_path = OCIO_PATH,
+    staging_dir = STAGING_DIR,
+    context = working_data["asset"],
+    family = working_data["project"]["code"],
+    views = ["sRGB", "Rec.709", "Log", "Raw"]
 )
-cpr.set_views(["sRGB", "Rec.709", "Log", "Raw"])
 
 # Compute repo transformations
-rpr = lablib.processors.RepoProcessor(
+rpr = processors.RepoProcessor(
     operators = epr.repo_operators,
     source_width = main_seq_info.display_width,
     source_height = main_seq_info.display_height,
@@ -80,23 +61,32 @@ rpr = lablib.processors.RepoProcessor(
     dest_height = OUTPUT_HEIGHT
 )
 
+# Compute slate
+spr = processors.SlateProcessor(
+    data = working_data,
+    width = OUTPUT_WIDTH,
+    height = OUTPUT_HEIGHT,
+    staging_dir = STAGING_DIR,
+    slate_template_path = SLATE_TEMPLATE_PATH,
+    is_source_linear = False
+)
+
 # Render the sequence
-rend = lablib.renderers.DefaultRenderer(
+rend = renderers.DefaultRenderer(
     color_proc = cpr,
     repo_proc = rpr,
-    sequence = main_seq,
+    source_sequence = main_seq,
     staging_dir = STAGING_DIR,
     name = "BLD_010_0010_Converted"
 )
-rend.set_debug(True)
+# rend.set_debug(True)
 rend.set_threads(8)
-rend.render()
+computed_seq = rend.render()
 
-# spr = lablib.processors.SlateProcessor(
-#     data = working_data,
-#     
-# )
-# 
-# rend = lablib.renderers.DefaultSlateRenderer(
-# 
-# )
+# Render the slate
+rend_slate = renderers.DefaultSlateRenderer(
+    slate_proc = spr,
+    source_sequence = computed_seq
+)
+# rend_slate.set_debug(True)
+rend_slate.render()

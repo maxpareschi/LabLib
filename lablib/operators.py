@@ -5,7 +5,6 @@ from copy import deepcopy
 import os
 import re
 
-import clique
 
 @dataclass
 class ImageInfo:
@@ -24,6 +23,7 @@ class ImageInfo:
 
 @dataclass
 class SequenceInfo:
+    path: str = None
     frames: list[str] = field(default_factory = lambda: list([]))
     frame_start: int = None
     frame_end: int = None
@@ -35,41 +35,55 @@ class SequenceInfo:
 
     def _get_file_splits(self, file_name: str) -> None:
         head, ext = os.path.splitext(file_name)
-        frame = int(re.findall(r'\d+$', head))
-        return head, frame, ext
+        frame = int(re.findall(r'\d+$', head)[0])
+        return head.replace(str(frame), ""), frame, ext
+    
+    def _get_length(self) -> int:
+        result = int(self.frame_end) - int(self.frame_start) + 1
+        return result
 
-    def compute(self,
-                collection: clique.Collection,
-                collection_path: str) -> None:
-        self.frames = [f for f in collection]
-        self.frame_start = int(self.frames[0].replace(collection.head, "").replace(collection.tail,""))
-        self.frame_end = int(self.frames[len(self.frames)-1].replace(collection.head, "").replace(collection.tail,""))
-        self.head = collection.head
-        self.tail = collection.tail
-        self.padding = len(str(self.frame_start))
-        self.frames = [os.path.abspath(os.path.join(collection_path, f)).replace("\\", "/") for f in collection]
-        self.hash_string = os.path.abspath(
-            os.path.join(
-                collection_path,
-                collection.format("{head}#{tail}")
-            )
-        ).replace("\\", "/")
-        self.format_string = os.path.abspath(
-            os.path.join(
-                collection_path,
-                "{}{}{}".format(collection.head, "%0{}d".format(self.padding), collection.tail)
-            )
-        ).replace("\\", "/")
+    def compute_all(self,
+                scan_dir: str,
+                return_only_longer: bool = True) -> list:
+        files = os.listdir(scan_dir)
+        sequenced_files = []
+        matched_files = []
+        for f in files:
+            head, tail = os.path.splitext(f)
+            matches = re.findall(r'\d+$', head)
+            if matches:
+                sequenced_files.append(f)
+                matched_files.append(head.replace(matches[0], ""))
+        matched_files = list(set(matched_files))
 
-    def computee(self, scan_dir: str) -> None:
-        frames = os.listdir(scan_dir)
-        for f in enumerate(deepcopy(frames)):
-            pass
+        results = []
+        for m in matched_files:
+            seq = SequenceInfo()
+            for sf in sequenced_files:
+                if m in sf:
+                    seq.frames.append(
+                        os.path.join(
+                            scan_dir,
+                            sf
+                        ).replace("\\", "/")
+                    )
 
-        
+            head, frame, ext = self._get_file_splits(seq.frames[0])
+            seq.path = os.path.abspath(scan_dir).replace("\\", "/")
+            seq.frame_start = frame
+            seq.frame_end = self._get_file_splits(seq.frames[-1])[1]
+            seq.head = os.path.basename(head)
+            seq.tail = ext
+            seq.padding = len(str(frame))
+            seq.hash_string = "{}#{}".format(os.path.basename(head), ext)
+            seq.format_string = "{}%0{}d{}".format(os.path.basename(head), len(str(frame)), ext)
+            results.append(seq)
 
+        return results
+    
+    def compute_longest(self, scan_dir: str) -> SequenceInfo:
+        return self.compute_all(scan_dir = scan_dir)[0]
 
-        
 
 @dataclass
 class RepoTransform:

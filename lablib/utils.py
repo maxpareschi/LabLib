@@ -25,7 +25,6 @@ def read_image_info(path: str,
                     default_par: float = None,
                     default_channels: int = None) -> ImageInfo:
     
-
     if not default_timecode: default_timecode = "01:00:00:01"
     if not default_fps: default_fps = 24.0
     if not default_par: default_par = 1.0
@@ -78,7 +77,7 @@ def read_image_info(path: str,
     ).stdout.strip().splitlines()
     
     for l in iinfo_out:
-        if abspath in l:
+        if abspath in l and l.find(abspath) < 2:
             vars = l.split(": ")[1].split(",")
             size = vars[0].strip().split("x")
             channels = vars[1].strip().split(" ")
@@ -124,7 +123,10 @@ def read_image_info(path: str,
             ffprobe_res["timecode"] = vars[1]
         if "sample_aspect_ratio" in l:
             par = vars[1].split(":")
-            ffprobe_res["par"] = float(int(par[0].strip())/int(par[1].strip()))
+            if vars[1] != "N/A":
+                ffprobe_res["par"] = float(int(par[0].strip())/int(par[1].strip()))
+            else:
+                ffprobe_res["par"] = 1
 
     for k, v in iinfo_res.items():
         if v != ffprobe_res[k]:

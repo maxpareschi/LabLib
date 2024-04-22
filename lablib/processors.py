@@ -155,6 +155,7 @@ class ColorProcessor:
     context: str = "LabLib"
     family: str = "LabLib"
     working_space: str = "ACES - ACEScg"
+    views: list[str] = field(default_factory = lambda: list([]))
 
     def __post_init__(self) -> None:
         if not self.config_path:
@@ -167,6 +168,8 @@ class ColorProcessor:
         self._description: str = None
         self._vars: dict = dict({})
         self._views: list[str] = None
+        if self.views:
+            self._views: list[str] = self.set_views(self.views)            
         self._ocio_config: OCIO.Config = None
         self._ocio_transforms: list = list([])
         self._ocio_search_paths: list = list([])
@@ -525,7 +528,7 @@ class SlateProcessor:
         self._charts = list([])
         self._thumb_class_name: str = "thumb"
         self._chart_class_name: str = "chart"
-        self._template_staging_dirname: str = "template_staging"
+        self._template_staging_dirname: str = "slate_staging"
         self._slate_staged_path: str = None
         self._slate_computed: str = None
         self._slate_base_image_path: str = None
@@ -600,7 +603,7 @@ class SlateProcessor:
         slate_staging_dir = Path(self.staging_dir, self._template_staging_dirname).resolve()
         slate_staged_path = Path(slate_staging_dir, slate_name).resolve()
         shutil.rmtree(slate_staging_dir.as_posix(), ignore_errors = True)
-        slate_staging_dir.mkdir(parents = True, exist_ok = True)
+        # slate_staging_dir.mkdir(parents = True, exist_ok = True)
         shutil.copytree(src = slate_dir.as_posix(),
                         dst = slate_staging_dir.as_posix())
         self._slate_staged_path = slate_staged_path.as_posix()
@@ -677,14 +680,13 @@ class SlateProcessor:
                     var element = arguments[0];
                     element.parentNode.removeChild(element);
                     """, c)
+        template_staged_path = Path(self._slate_staged_path).resolve().parent
         slate_base_path = Path(
-            Path(self.staging_dir),
+            template_staged_path,
             self._slate_base_name
         ).resolve()
         self._driver.save_screenshot(slate_base_path.as_posix())
         self._driver.quit()
-        template_staged_path = Path(self._slate_staged_path).resolve().parent
-        shutil.rmtree(template_staged_path)
         self._slate_base_image_path = slate_base_path
         return slate_base_path
 
