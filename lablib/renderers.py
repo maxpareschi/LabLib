@@ -86,6 +86,8 @@ class DefaultRenderer:
         if self._debug:
             print("oiiotool cmd >>> {}".format(" ".join(self._command)))
         subprocess.run(cmd)
+        # result = SequenceInfo()
+        # result.compute()
 
     def render_repo_ffmpeg(self,
                            src: str,

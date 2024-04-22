@@ -1,7 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from copy import deepcopy
 
 import os
+import re
 
 import clique
 
@@ -31,6 +33,11 @@ class SequenceInfo:
     hash_string: str = None
     format_string: str = None
 
+    def _get_file_splits(self, file_name: str) -> None:
+        head, ext = os.path.splitext(file_name)
+        frame = int(re.findall(r'\d+$', head))
+        return head, frame, ext
+
     def compute(self,
                 collection: clique.Collection,
                 collection_path: str) -> None:
@@ -54,6 +61,15 @@ class SequenceInfo:
             )
         ).replace("\\", "/")
 
+    def computee(self, scan_dir: str) -> None:
+        frames = os.listdir(scan_dir)
+        for f in enumerate(deepcopy(frames)):
+            pass
+
+        
+
+
+        
 
 @dataclass
 class RepoTransform:
