@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
 import os
+from pathlib import Path
 import re
 from typing import List
 
+from lablib.operators import BaseOperator, ImageInfo
 
-@dataclass
-class SequenceInfo:
+
+class SequenceInfo(BaseOperator):
     path: str = None
     frames: List[str] = field(default_factory=list)
     frame_start: int = None
@@ -67,4 +69,36 @@ class SequenceInfo:
 
     def compute_longest(self, scan_dir: str) -> SequenceInfo:
         return self.compute_all(scan_dir=scan_dir)[0]
+
+    @classmethod
+    def scan(cls, directory: str | Path) -> List[SequenceInfo]:
+        cls.log.info(f"{directory = }")
+        if not isinstance(directory, Path):
+            directory = Path(directory)
+
+        if not directory.is_dir():
+            raise NotImplementedError(f"{directory} is no directory")
+
+        files_map = {}
+        for item in directory.iterdir():
+            if not item.is_file():
+                continue
+            if item.suffix not in (".exr"):
+                cls.log.warning(f"{item.suffix} not in (.exr)")
+                continue
+
+            if re.findall(r"\.(\d+)", item.stem):
+                name = item.stem.split(".")[0]
+            else:
+                name = item.stem
+            cls.log.info(f"{name = }")
+
+            if name not in files_map.keys():
+                files_map[name] = []
+            files_map[name].append(ImageInfo(item))
+
+        for seq_name, seq_files in files_map.items():
+            cls.log.info(f"{seq_name = }")
+            cls.log.info(f"{seq_files = }")
+            cls.log.info(f"{len(seq_files) = }")
 

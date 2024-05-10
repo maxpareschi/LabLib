@@ -43,7 +43,7 @@ def test_ImageInfo_scan(directory: str):
     assert image_info.timecode == "02:10:04:17"
 
 
-@pytest.mark.skip(reason="SequenceInfo is not implemented yet")
+# @pytest.mark.skip(reason="SequenceInfo is not implemented yet")
 @pytest.mark.parametrize(
     "path",
     [
