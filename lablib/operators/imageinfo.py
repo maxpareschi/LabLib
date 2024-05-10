@@ -8,6 +8,8 @@ import lablib.utils as llu
 
 
 class ImageInfo(BaseOperator):
+    """ImageInfo class for reading image metadata."""
+
     filepath: Path = None
     filename: str = None
     origin_x: int = 0
@@ -41,6 +43,10 @@ class ImageInfo(BaseOperator):
         # self.read_image_info(path)
 
     def update_from_path(self, force_ffprobe=True):
+        """Update ImageInfo from a given file path.
+        NOTE: force_ffprobe overrides iinfo values with ffprobe values.
+              It's used since they report different framerates for testing exr files.
+        """
         iinfo_res = llu.call_iinfo(self.filepath)
         ffprobe_res = llu.call_ffprobe(self.filepath)
 

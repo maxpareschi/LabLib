@@ -18,4 +18,5 @@ class BaseOperator:
             self.log.error(f"Cannot set {k}={v}. Key {k} not found.", stack_info=True)
 
     def update_from_path(self, path: Path) -> None:
-        raise NotImplementedError("update_from_path method not implemented.")
+        """Update operator attributes from a given file path."""
+        raise NotImplementedError("update_from_path should be implemented.")

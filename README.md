@@ -27,6 +27,11 @@ Please see the sample `test_run.py` for an usage example.
 
 ---
 
+## Testing
+- `poetry install`
+- `poetry run pytest -s`
+
+
 ### Features (Planned and Done)
 
 - [x] Repo Processor
