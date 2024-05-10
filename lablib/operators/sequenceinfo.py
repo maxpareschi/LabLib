@@ -1,24 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import os
 import re
-from dataclasses import dataclass, field
 from typing import List
-
-
-@dataclass
-class ImageInfo:
-    filename: str = None
-    origin_x: int = 0
-    origin_y: int = 0
-    width: int = 1920
-    height: int = 1080
-    display_width: int = 1920
-    display_height: int = 1080
-    channels: int = 3
-    fps: float = 24.0
-    par: float = 1.0
-    timecode: str = "01:00:00:01"
 
 
 @dataclass
@@ -33,11 +18,16 @@ class SequenceInfo:
     hash_string: str = None
     format_string: str = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.update_from_path(self.path)
+
     def _get_file_splits(self, file_name: str) -> None:
         head, ext = os.path.splitext(file_name)
         frame = int(re.findall(r"\d+$", head)[0])
         return head.replace(str(frame), ""), frame, ext
-    
+
     def _get_length(self) -> int:
         return int(self.frame_end) - int(self.frame_start) + 1
 
@@ -58,12 +48,7 @@ class SequenceInfo:
             seq = SequenceInfo()
             for sf in sequenced_files:
                 if m in sf:
-                    seq.frames.append(
-                        os.path.join(
-                            scan_dir,
-                            sf
-                        ).replace("\\", "/")
-                    )
+                    seq.frames.append(os.path.join(scan_dir, sf).replace("\\", "/"))
 
             head, frame, ext = self._get_file_splits(seq.frames[0])
             seq.path = os.path.abspath(scan_dir).replace("\\", "/")
@@ -79,49 +64,7 @@ class SequenceInfo:
             results.append(seq)
 
         return results
-    
+
     def compute_longest(self, scan_dir: str) -> SequenceInfo:
         return self.compute_all(scan_dir=scan_dir)[0]
-
-
-@dataclass
-class RepoTransform:
-    translate: List[float] = field(default_factory=lambda: [0.0, 0.0])
-    rotate: float = 0.0
-    scale: List[float] = field(default_factory=lambda: [0.0, 0.0])
-    center: List[float] = field(default_factory=lambda: [0.0, 0.0])
-
-
-@dataclass
-class FileTransform:
-    src: str = ""
-    cccId: str = "0"
-    direction: int = 0
-
-
-@dataclass
-class DisplayViewTransform:
-    src: str = "ACES - ACEScg"
-    display: str = "ACES"
-    view: str = "Rec.709"
-    direction: int = 0
-
-
-@dataclass
-class ColorSpaceTransform:
-    src: str = "ACES - ACEScg"
-    dst: str = "ACES - ACEScg"
-
-
-@dataclass
-class CDLTransform:
-    # src: str = "" # NOT NEEDED, USE FILETRANSFORM FOR CDL FILES
-    offset: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
-    power: List[float] = field(default_factory=lambda: [1.0, 1.0, 1.0])
-    slope: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
-    sat: float = 1.0
-    description: str = ""
-    id: str = ""
-    direction: int = 0
-
 
