@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import field
 import os
 from pathlib import Path
 import re
@@ -11,7 +10,7 @@ from lablib.operators import BaseOperator, ImageInfo
 
 class SequenceInfo(BaseOperator):
     path: str = None
-    frames: List[str] = field(default_factory=list)
+    frames: List[str] = None
     frame_start: int = None
     frame_end: int = None
     head: str = None
@@ -102,3 +101,8 @@ class SequenceInfo(BaseOperator):
             cls.log.info(f"{seq_files = }")
             cls.log.info(f"{len(seq_files) = }")
 
+    # def update_from_path(self, path: Path) -> None:
+    #     if not path.is_dir():
+    #         raise NotImplementedError(
+    #             "SequenceInfo from a file is not yet implemented."
+    #         )
