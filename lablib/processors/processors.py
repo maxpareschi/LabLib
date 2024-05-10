@@ -15,10 +15,7 @@ from selenium.webdriver.common.by import By
 
 import PyOpenColorIO as OCIO
 
-from . import (
-    utils,
-    operators as ops
-)
+from . import utils, operators as ops
 
 
 @dataclass
@@ -50,9 +47,7 @@ class EffectsFileProcessor:
         self._repo_ops = []
 
     def __post_init__(self) -> None:
-        self._wrapper_class_members = dict(
-            inspect.getmembers(ops, inspect.isclass)
-        )
+        self._wrapper_class_members = dict(inspect.getmembers(ops, inspect.isclass))
         self._color_ops: List = []
         self._repo_ops: List = []
         self._class_search_key: str = "class"
@@ -72,23 +67,19 @@ class EffectsFileProcessor:
             "power",
             "offset",
             "slope",
-            "direction"
+            "direction",
         )
         self._valid_attrs_mapping: Dict[str, str] = {
             "in_colorspace": "src",
             "out_colorspace": "dst",
             "file": "src",
-            "saturation": "sat"
+            "saturation": "sat",
         }
         if self.src:
             self.load(self.src)
 
     def _get_operator_class(self, name: str) -> Any:
-        name = "{}Transform".format(
-            name
-            .replace("OCIO", "")
-            .replace("Transform", "")
-        )
+        name = "{}Transform".format(name.replace("OCIO", "").replace("Transform", ""))
         if name in self._wrapper_class_members:
             return self._wrapper_class_members[name]
 
@@ -174,11 +165,15 @@ class ColorProcessor:
             self.config_path = Path(os.environ.get("OCIO")).as_posix()
 
         if not self.staging_dir:
-            self.staging_dir = Path(
-                os.environ.get("TEMP", os.environ["TMP"]),
-                "LabLib",
-                str(uuid.uuid4())
-            ).resolve().as_posix()
+            self.staging_dir = (
+                Path(
+                    os.environ.get("TEMP", os.environ["TMP"]),
+                    "LabLib",
+                    str(uuid.uuid4()),
+                )
+                .resolve()
+                .as_posix()
+            )
         self._description: str = None
         self._vars: Dict = {}
         self._views: List[str] = None
@@ -326,11 +321,9 @@ class ColorProcessor:
         for op in self.operators:
             props = vars(op)
             if props.get("direction"):
-                props["direction"] = (
-                    OCIO.TransformDirection.TRANSFORM_DIR_INVERSE)
+                props["direction"] = OCIO.TransformDirection.TRANSFORM_DIR_INVERSE
             else:
-                props["direction"] = (
-                    OCIO.TransformDirection.TRANSFORM_DIR_FORWARD)
+                props["direction"] = OCIO.TransformDirection.TRANSFORM_DIR_FORWARD
             ocio_class_name = getattr(OCIO, op.__class__.__name__)
 
             if props.get("src"):
@@ -346,20 +339,16 @@ class ColorProcessor:
         self._ocio_config.setDescription(self._description)
         group_transform = OCIO.GroupTransform(self._ocio_transforms)
         look_transform = OCIO.ColorSpaceTransform(
-            src=self.working_space,
-            dst=self.context
+            src=self.working_space, dst=self.context
         )
         cspace = OCIO.ColorSpace()
         cspace.setName(self.context)
         cspace.setFamily(self.family)
         cspace.setTransform(
-            group_transform,
-            OCIO.ColorSpaceDirection.COLORSPACE_DIR_FROM_REFERENCE
+            group_transform, OCIO.ColorSpaceDirection.COLORSPACE_DIR_FROM_REFERENCE
         )
         look = OCIO.Look(
-            name=self.context,
-            processSpace=self.working_space,
-            transform=look_transform
+            name=self.context, processSpace=self.working_space, transform=look_transform
         )
         self._ocio_config.addColorSpace(cspace)
         self._ocio_config.addLook(look)
@@ -367,7 +356,7 @@ class ColorProcessor:
             self._ocio_config.getActiveDisplays().split(",")[0],
             self.context,
             self.working_space,
-            looks=self.context
+            looks=self.context,
         )
 
         if not self._views:
@@ -375,25 +364,18 @@ class ColorProcessor:
         else:
             views_value = ",".join(self._views)
 
-        self._ocio_config.setActiveViews(
-            "{},{}".format(self.context, views_value)
-        )
+        self._ocio_config.setActiveViews("{},{}".format(self.context, views_value))
         self._ocio_config.validate()
 
     def write_config(self, dest: str = None) -> str:
-        search_paths = [
-            f"  - {path}"
-            for path in self._search_paths
-        ]
+        search_paths = [f"  - {path}" for path in self._search_paths]
 
         config_lines = []
         for line in self._ocio_config.serialize().splitlines():
             if "search_path" not in line:
                 config_lines.append(line)
                 continue
-            config_lines.extend(
-                ["", "search_path:"] + search_paths + [""]
-            )
+            config_lines.extend(["", "search_path:"] + search_paths + [""])
 
         final_config = "\n".join(config_lines)
         dest = Path(dest).resolve()
@@ -417,10 +399,10 @@ class ColorProcessor:
         return [
             "--colorconfig",
             self._dest_path,
-            "--ociolook:from=\"{}\":to=\"{}\"".format(
+            '--ociolook:from="{}":to="{}"'.format(
                 self.working_space, self.working_space
             ),
-            self.context
+            self.context,
         ]
 
 
@@ -433,8 +415,8 @@ class RepoProcessor:
     dest_height: int = None
 
     def __post_init__(self):
-         self._raw_matrix: List[List[float]] = [[]]
-         self._class_search_key = "class"
+        self._raw_matrix: List[List[float]] = [[]]
+        self._class_search_key = "class"
 
     def set_source_size(self, width: int, height: int) -> None:
         self.source_width = width
@@ -455,10 +437,7 @@ class RepoProcessor:
                 self.operators.append(a)
 
     def get_matrix_chained(
-        self,
-        flip: bool = False,
-        flop: bool = True,
-        reverse_chain: bool = True
+        self, flip: bool = False, flop: bool = True, reverse_chain: bool = True
     ) -> str:
         chain = []
         tlist = list(self.operators)
@@ -472,12 +451,11 @@ class RepoProcessor:
             chain.append(utils.flop_matrix(self.source_height))
 
         for xform in tlist:
-            chain.append(utils.calculate_matrix(
-                t=xform.translate,
-                r=xform.rotate,
-                s=xform.scale,
-                c=xform.center
-            ))
+            chain.append(
+                utils.calculate_matrix(
+                    t=xform.translate, r=xform.rotate, s=xform.scale, c=xform.center
+                )
+            )
 
         if flop:
             chain.append(utils.flop_matrix(self.source_height))
@@ -491,14 +469,9 @@ class RepoProcessor:
         self._raw_matrix = result
         return result
 
-    def get_cornerpin_data(
-        self, matrix: List[List[float]]
-    ) -> List:
+    def get_cornerpin_data(self, matrix: List[List[float]]) -> List:
         return utils.matrix_to_cornerpin(
-            m=matrix,
-            w=self.source_width,
-            h=self.source_height,
-            origin_upperleft=False
+            m=matrix, w=self.source_width, h=self.source_height, origin_upperleft=False
         )
 
     def get_oiiotool_cmd(self) -> List:
@@ -515,7 +488,7 @@ class RepoProcessor:
         matrix_tr = utils.transpose_matrix(matrix)
         warp_cmd = utils.matrix_to_csv(matrix_tr)
 
-        src_aspect = self.source_width /self.source_height
+        src_aspect = self.source_width / self.source_height
         dest_aspect = self.dest_width / self.dest_height
 
         fitted_width = self.source_width
@@ -537,10 +510,14 @@ class RepoProcessor:
         dest_size = f"{self.dest_width}x{self.dest_height}"
 
         return [
-            "--warp:filter=cubic:recompute_roi=1", warp_cmd,
-            "--crop", cropped_area,
-            "--fullsize", cropped_area,
-            "--resize", dest_size
+            "--warp:filter=cubic:recompute_roi=1",
+            warp_cmd,
+            "--crop",
+            cropped_area,
+            "--fullsize",
+            cropped_area,
+            "--resize",
+            dest_size,
         ]
 
 
@@ -579,10 +556,10 @@ class SlateProcessor:
         options.add_argument("--log-level=OFF")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument('--disable-extensions')
-        options.add_argument('--disable-gpu')
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-gpu")
         options.add_experimental_option("excludeSwitches", ["enable-logging"])
-        self._driver = webdriver.Chrome(options = options)
+        self._driver = webdriver.Chrome(options=options)
 
     def get_staging_dir(self) -> str:
         return self.staging_dir
@@ -631,7 +608,7 @@ class SlateProcessor:
             "return [window.outerWidth - window.innerWidth + arguments[0],"
             "window.outerHeight - window.innerHeight + arguments[1]];",
             width,
-            height
+            height,
         )
         self._driver.set_window_size(*window_size)
 
@@ -648,10 +625,7 @@ class SlateProcessor:
         ).resolve()
         slate_staged_path = Path(slate_staging_dir, slate_name).resolve()
         shutil.rmtree(slate_staging_dir.as_posix(), ignore_errors=True)
-        shutil.copytree(
-            src=slate_dir.as_posix(),
-            dst=slate_staging_dir.as_posix()
-        )
+        shutil.copytree(src=slate_dir.as_posix(), dst=slate_staging_dir.as_posix())
         self._slate_staged_path = slate_staged_path.as_posix()
         return self._slate_staged_path
 
@@ -659,8 +633,7 @@ class SlateProcessor:
         if not self.data:
             raise ValueError("Missing subst_data to format template!")
         with open(self._slate_staged_path, "r+") as f:
-            formatted_slate = f.read().format_map(
-                utils.format_dict(self.data))
+            formatted_slate = f.read().format_map(utils.format_dict(self.data))
             f.seek(0)
             f.write(formatted_slate)
             f.truncate()
@@ -668,22 +641,17 @@ class SlateProcessor:
         self._driver.get(self._slate_staged_path)
         elements = self._driver.find_elements(
             By.XPATH,
-            "//*[contains(text(),'{}')]".format(
-                utils.format_dict._placeholder
-            )
+            "//*[contains(text(),'{}')]".format(utils.format_dict._placeholder),
         )
         for el in elements:
             self._driver.execute_script(
-                "var element = arguments[0];\n"
-                "element.style.display = 'none';",
-                el
+                "var element = arguments[0];\n" "element.style.display = 'none';", el
             )
             if self._remove_missing_parents:
                 parent = el.find_element(By.XPATH, "..")
                 self._driver.execute_script(
-                    "var element = arguments[0];\n"
-                    "element.style.display = 'none';",
-                    parent
+                    "var element = arguments[0];\n" "element.style.display = 'none';",
+                    parent,
                 )
         with open(self._slate_staged_path, "w") as f:
             f.write(self._driver.page_source)
@@ -691,9 +659,7 @@ class SlateProcessor:
     def setup_base_slate(self) -> str:
         self._driver.get(self._slate_staged_path)
         self.set_viewport_size(self.width, self.height)
-        thumbs = self._driver.find_elements(
-            By.CLASS_NAME, self._thumb_class_name
-        )
+        thumbs = self._driver.find_elements(By.CLASS_NAME, self._thumb_class_name)
         for thumb in thumbs:
             src_path = thumb.get_attribute("src")
             if not src_path:
@@ -702,9 +668,10 @@ class SlateProcessor:
             aspect_ratio = self.width / self.height
             thumb_height = int(thumb.size["width"] / aspect_ratio)
             self._driver.execute_script(
-                "var element = arguments[0];"
-                "element.style.height = '{}px'".format(thumb_height),
-                thumb
+                "var element = arguments[0];" "element.style.height = '{}px'".format(
+                    thumb_height
+                ),
+                thumb,
             )
             self._thumbs.append(
                 utils.ImageInfo(
@@ -712,7 +679,7 @@ class SlateProcessor:
                     origin_x=thumb.location["x"],
                     origin_y=thumb.location["y"],
                     width=thumb.size["width"],
-                    height=thumb_height
+                    height=thumb_height,
                 )
             )
 
@@ -720,12 +687,10 @@ class SlateProcessor:
             self._driver.execute_script(
                 "var element = arguments[0];"
                 "element.parentNode.removeChild(element);",
-                thumb
+                thumb,
             )
 
-        charts = self._driver.find_elements(
-            By.CLASS_NAME, self._chart_class_name
-        )
+        charts = self._driver.find_elements(By.CLASS_NAME, self._chart_class_name)
         for chart in charts:
             src_path = chart.get_attribute("src")
             if src_path:
@@ -735,7 +700,7 @@ class SlateProcessor:
                         origin_x=chart.location["x"],
                         origin_y=chart.location["y"],
                         width=chart.size["width"],
-                        height=chart.size["height"]
+                        height=chart.size["height"],
                     )
                 )
 
@@ -743,14 +708,11 @@ class SlateProcessor:
             self._driver.execute_script(
                 "var element = arguments[0];"
                 "element.parentNode.removeChild(element);",
-                chart
+                chart,
             )
 
         template_staged_path = Path(self._slate_staged_path).resolve().parent
-        slate_base_path = Path(
-            template_staged_path,
-            self._slate_base_name
-        ).resolve()
+        slate_base_path = Path(template_staged_path, self._slate_base_name).resolve()
         self._driver.save_screenshot(slate_base_path.as_posix())
         self._driver.quit()
         self._slate_base_image_path = slate_base_path
@@ -759,7 +721,9 @@ class SlateProcessor:
     def set_thumbnail_sources(self) -> None:
         thumb_steps = int(len(self.source_files) / (len(self._thumbs) + 1))
         for i, t in enumerate(self._thumbs):
-            self._thumbs[i].filename = Path(self.source_files[thumb_steps * (i + 1)]).resolve().as_posix()
+            self._thumbs[i].filename = (
+                Path(self.source_files[thumb_steps * (i + 1)]).resolve().as_posix()
+            )
 
     def create_base_slate(self) -> None:
         self.stage_slate()
@@ -778,53 +742,80 @@ class SlateProcessor:
     def get_oiiotool_cmd(self) -> List:
         label = "base"
         cmd = [
-            "-i", Path(self._slate_base_image_path).resolve().as_posix(),
-            "--colorconvert", "sRGB", "linear",
-            "--ch", "R,G,B,A=1.0",
-            "--label", "slate",
-            "--create", "{}x{}".format(self.width, self.height), "4",
-            "--ch", "R,G,B,A=0.0",
-            "--label", label
+            "-i",
+            Path(self._slate_base_image_path).resolve().as_posix(),
+            "--colorconvert",
+            "sRGB",
+            "linear",
+            "--ch",
+            "R,G,B,A=1.0",
+            "--label",
+            "slate",
+            "--create",
+            "{}x{}".format(self.width, self.height),
+            "4",
+            "--ch",
+            "R,G,B,A=0.0",
+            "--label",
+            label,
         ]
         for thumb in self._thumbs:
-            cmd.extend([
-                "-i", thumb.filename
-            ])
+            cmd.extend(["-i", thumb.filename])
             if not self.is_source_linear:
                 cmd.extend(["--colorconvert", "sRGB", "linear"])
 
-            cmd.extend([
-                "--ch", "R,G,B,A=1.0",
-                "--resample", "{}x{}+{}+{}".format(
-                    thumb.width, thumb.height, thumb.origin_x, thumb.origin_y
-                ),
-                label,
-                "--over",
-                "--label", "imgs"
-            ])
+            cmd.extend(
+                [
+                    "--ch",
+                    "R,G,B,A=1.0",
+                    "--resample",
+                    "{}x{}+{}+{}".format(
+                        thumb.width, thumb.height, thumb.origin_x, thumb.origin_y
+                    ),
+                    label,
+                    "--over",
+                    "--label",
+                    "imgs",
+                ]
+            )
             label = "imgs"
 
         for chart in self._charts:
-            cmd.extend([
-                "-i", chart.filename,
-                "--colorconvert", "sRGB", "linear",
-                "--ch", "R,G,B,A=1.0",
-                "--resample", "{}x{}+{}+{}".format(
-                    chart.width, chart.height, chart.origin_x, chart.origin_y
-                ),
-                "imgs",
-                "--over",
-                "--label", "imgs"
-            ])
+            cmd.extend(
+                [
+                    "-i",
+                    chart.filename,
+                    "--colorconvert",
+                    "sRGB",
+                    "linear",
+                    "--ch",
+                    "R,G,B,A=1.0",
+                    "--resample",
+                    "{}x{}+{}+{}".format(
+                        chart.width, chart.height, chart.origin_x, chart.origin_y
+                    ),
+                    "imgs",
+                    "--over",
+                    "--label",
+                    "imgs",
+                ]
+            )
 
-        cmd.extend([
-            "slate",
-            "--over",
-            "--label", "complete_slate",
-        ])
+        cmd.extend(
+            [
+                "slate",
+                "--over",
+                "--label",
+                "complete_slate",
+            ]
+        )
         if not self.is_source_linear:
-            cmd.extend([
-                "--colorconvert", "linear", "sRGB",
-            ])
+            cmd.extend(
+                [
+                    "--colorconvert",
+                    "linear",
+                    "sRGB",
+                ]
+            )
 
         return cmd
