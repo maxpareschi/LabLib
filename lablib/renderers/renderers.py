@@ -27,13 +27,13 @@ class DefaultRenderer:
         self._command: List[str] = []
         if not self.name:
             self.name = "lablib_render"
-    
+
     def setup_staging_dir(self) -> None:
         render_staging_dir = Path(self.staging_dir, self.name)
         if not render_staging_dir.resolve().is_dir():
-            shutil.rmtree(render_staging_dir.as_posix(), ignore_errors = True)
-            render_staging_dir.mkdir(parents = True, exist_ok = True)
-            
+            shutil.rmtree(render_staging_dir.as_posix(), ignore_errors=True)
+            render_staging_dir.mkdir(parents=True, exist_ok=True)
+
     def set_color_processor(self, processor: ColorProcessor) -> None:
         self.color_proc = processor
 
@@ -61,11 +61,12 @@ class DefaultRenderer:
         self.setup_staging_dir()
         cmd = [
             "oiiotool",
-            "-i", Path(
-                self.source_sequence.path,
-                self.source_sequence.hash_string
-            ).resolve().as_posix(),
-            "--threads", str(self._threads),
+            "-i",
+            Path(self.source_sequence.path, self.source_sequence.hash_string)
+            .resolve()
+            .as_posix(),
+            "--threads",
+            str(self._threads),
         ]
         if self.repo_proc:
             cmd.extend(self.repo_proc.get_oiiotool_cmd())
@@ -74,30 +75,22 @@ class DefaultRenderer:
             self.color_proc.create_config()
             cmd.extend(self.color_proc.get_oiiotool_cmd())
 
-        cmd.extend([
-            "--ch", "R,G,B"
-        ])
+        cmd.extend(["--ch", "R,G,B"])
         if self._debug:
-            cmd.extend([
-                "--debug", "-v"
-            ])
+            cmd.extend(["--debug", "-v"])
 
         if self.format:
             dest_path = "{}{}{}".format(
                 self.source_sequence.head,
                 "#",
-                ".{}".format(self.format) if self.format.find(".") < 0 else self.format
+                ".{}".format(self.format) if self.format.find(".") < 0 else self.format,
             )
         else:
             dest_path = self.source_sequence.hash_string
 
-        cmd.extend([
-            "-o", Path(
-                self.staging_dir,
-                self.name,
-                dest_path
-            ).resolve().as_posix()
-        ])
+        cmd.extend(
+            ["-o", Path(self.staging_dir, self.name, dest_path).resolve().as_posix()]
+        )
         self._command = cmd
         if self._debug:
             print("oiiotool cmd >>> {}".format(" ".join(self._command)))
@@ -116,7 +109,7 @@ class DefaultRenderer:
         in_args: List = None,
         out_args: List = None,
         resolution: str = None,
-        debug: str = "error"
+        debug: str = "error",
     ) -> SequenceInfo:
         if not resolution:
             resolution = "1920x1080"
@@ -126,26 +119,34 @@ class DefaultRenderer:
         if in_args:
             cmd.extend(in_args)
         cmd.extend(["-i", src])
-        cmd.extend(["-vf", ",".join([
-                "perspective={}:{}:{}:{}:{}:{}:{}:{}:{}".format(
-                    cornerpin[0], cornerpin[1],
-                    cornerpin[2], cornerpin[3],
-                    cornerpin[4], cornerpin[5],
-                    cornerpin[6], cornerpin[7],
-                    "sense=destination:eval=init"
+        cmd.extend(
+            [
+                "-vf",
+                ",".join(
+                    [
+                        "perspective={}:{}:{}:{}:{}:{}:{}:{}:{}".format(
+                            cornerpin[0],
+                            cornerpin[1],
+                            cornerpin[2],
+                            cornerpin[3],
+                            cornerpin[4],
+                            cornerpin[5],
+                            cornerpin[6],
+                            cornerpin[7],
+                            "sense=destination:eval=init",
+                        ),
+                        f"scale={width}:-1",
+                        f"crop={width}:{height}",
+                    ]
                 ),
-                f"scale={width}:-1",
-                f"crop={width}:{height}"
-            ])
-        ])
+            ]
+        )
         if out_args:
             cmd.extend(out_args)
         cmd.append(dst)
         subprocess.run(cmd)
         result = SequenceInfo()
-        return result.compute_longest(
-            Path(dst).resolve().parent.as_posix()
-        )
+        return result.compute_longest(Path(dst).resolve().parent.as_posix())
 
 
 @dataclass
@@ -164,8 +165,7 @@ class DefaultSlateRenderer:
         if self.dest:
             self.set_destination(self.dest)
 
-    def set_slate_processor(self,
-                            processor: SlateProcessor) -> None:
+    def set_slate_processor(self, processor: SlateProcessor) -> None:
         self.slate_proc = processor
 
     def set_debug(self, debug: bool) -> None:
@@ -173,13 +173,9 @@ class DefaultSlateRenderer:
 
     def set_source_sequence(self, source_sequence: SequenceInfo) -> None:
         self.source_sequence = source_sequence
-        head, frame, tail = source_sequence._get_file_splits(
-            source_sequence.frames[0]
-        )
+        head, frame, tail = source_sequence._get_file_splits(source_sequence.frames[0])
         self.dest = "{}{}{}".format(
-            head,
-            str(int(frame) - 1).zfill(source_sequence.padding),
-            tail
+            head, str(int(frame) - 1).zfill(source_sequence.padding), tail
         )
 
     def set_destination(self, dest: str) -> None:
@@ -188,27 +184,25 @@ class DefaultSlateRenderer:
     def render(self) -> None:
         first_frame = read_image_info(self.source_sequence.frames[0])
         timecode = offset_timecode(
-            tc=first_frame.timecode,
-            frame_offset=-1,
-            fps=first_frame.fps
+            tc=first_frame.timecode, frame_offset=-1, fps=first_frame.fps
         )
         self.slate_proc.create_base_slate()
         if not self.slate_proc:
             raise ValueError("Missing valid SlateProcessor!")
         cmd = ["oiiotool"]
         cmd.extend(self.slate_proc.get_oiiotool_cmd())
-        cmd.extend([
-            "--ch", "R,G,B",
-            "--attrib:type=timecode",
-            "smpte:TimeCode", "'{}'".format(timecode.replace("\"", ""))
-        ])
+        cmd.extend(
+            [
+                "--ch",
+                "R,G,B",
+                "--attrib:type=timecode",
+                "smpte:TimeCode",
+                "'{}'".format(timecode.replace('"', "")),
+            ]
+        )
         if self._debug:
-            cmd.extend([
-                "--debug", "-v"
-            ])
-        cmd.extend([
-            "-o", self.dest
-        ])
+            cmd.extend(["--debug", "-v"])
+        cmd.extend(["-o", self.dest])
         self._command = cmd
         subprocess.run(cmd)
         slate_base_image_path = Path(self.slate_proc._slate_base_image_path).resolve()
