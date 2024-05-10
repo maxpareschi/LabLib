@@ -4,9 +4,11 @@ from pathlib import Path
 
 
 class BaseOperator:
+    log = logging.getLogger(__name__)
+    log.setLevel(logging.DEBUG)
+
     def __init__(self, *args, **kwargs):
-        self.log = logging.getLogger(__name__)
-        self.log.setLevel(logging.DEBUG)
+        pass
 
     def __getitem__(self, k: str) -> Any:
         return getattr(self, k)
