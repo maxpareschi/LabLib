@@ -3,6 +3,7 @@ import os
 import math
 import uuid
 import logging
+import subprocess
 from pathlib import Path
 from typing import List
 
@@ -11,6 +12,90 @@ import opentimelineio as otio
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+
+def call_iinfo(filepath: str | Path) -> dict:
+    if isinstance(filepath, str):
+        filepath = Path(filepath)
+    abspath = str(filepath.resolve())
+    cmd = ["iinfo", "-v", abspath]
+    cmd_out = (
+        subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()
+    )
+
+    result = {}
+    for line in cmd_out:
+        log.debug(f"iinfo {line = }")
+        if abspath in line and line.find(abspath) < 2:
+            vars = line.split(": ")[1].split(",")
+            size = vars[0].strip().split("x")
+            channels = vars[1].strip().split(" ")
+            result["width"] = int(size[0].strip())
+            result["height"] = int(size[1].strip())
+            result["display_width"] = int(size[0].strip())
+            result["display_height"] = int(size[1].strip())
+            result["channels"] = int(channels[0].strip())
+        if "FramesPerSecond" in line or "framesPerSecond" in line:
+            vars = line.split(": ")[1].strip().split(" ")[0].split("/")
+            result["fps"] = float(round(float(int(vars[0]) / int(vars[1])), 3))
+        if "full/display size" in line:
+            size = line.split(": ")[1].split("x")
+            result["display_width"] = int(size[0].strip())
+            result["display_height"] = int(size[1].strip())
+        if "pixel data origin" in line:
+            origin = line.split(": ")[1].strip().split(",")
+            result["origin_x"] = (int(origin[0].replace("x=", "").strip()),)
+            result["origin_y"] = (int(origin[1].replace("y=", "").strip()),)
+        if "smpte:TimeCode" in line:
+            result["timecode"] = line.split(": ")[1].strip()
+        if "PixelAspectRatio" in line:
+            result["par"] = float(line.split(": ")[1].strip())
+
+    return result
+
+
+def call_ffprobe(filepath: str | Path) -> dict:
+    if isinstance(filepath, str):
+        filepath = Path(filepath)
+    abspath = str(filepath.resolve())
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "format_tags=timecode:stream_tags=timecode:stream=width,height,r_frame_rate,sample_aspect_ratio",
+        "-of",
+        "default=noprint_wrappers=1",
+        abspath,
+    ]
+    cmd_out = (
+        subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()
+    )
+    result = {}
+    for line in cmd_out:
+        log.debug(f"ffprobe {line = }")
+        vars = line.split("=")
+        if "width" in vars[0]:
+            result["display_width"] = int(vars[1].strip())
+        if "height" in vars[0]:
+            result["display_height"] = int(vars[1].strip())
+        if "r_frame_rate" in vars[0]:
+            rate = vars[1].split("/")
+            result["fps"] = float(
+                round(float(int(rate[0].strip()) / int(rate[1].strip())), 3)
+            )
+        if "timecode" in line:
+            result["timecode"] = vars[1]
+        if "sample_aspect_ratio" in line:
+            par = vars[1].split(":")
+            if vars[1] != "N/A":
+                result["par"] = float(int(par[0].strip()) / int(par[1].strip()))
+            else:
+                result["par"] = 1
+
+    return result
 
 
 class format_dict(dict):

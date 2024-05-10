@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 
 from lablib.operators import BaseOperator
+import lablib.utils as llu
 
 
 class ImageInfo(BaseOperator):
@@ -32,10 +33,23 @@ class ImageInfo(BaseOperator):
         if path.suffix not in (".exr"):
             raise ValueError(f"Invalid file type: {path}")
 
-        self.path = path
+        self.filepath = path
+        self.filename = path.name
 
         self.log.info(f"Reading image info from {path}")
-        self.read_image_info(path)
+        self.update_from_path()
+        # self.read_image_info(path)
+
+    def update_from_path(self, force_ffprobe=True):
+        iinfo_res = llu.call_iinfo(self.filepath)
+        ffprobe_res = llu.call_ffprobe(self.filepath)
+
+        for k, v in iinfo_res.items():
+            if not v:
+                continue
+            self[k] = v
+            if ffprobe_res.get(k) and force_ffprobe:
+                self[k] = ffprobe_res[k]
 
     def read_image_info(
         self,
@@ -189,4 +203,3 @@ class ImageInfo(BaseOperator):
         for k, v in result.items():
             self.log.info(f"{k} = {v}")
             self[k] = v
-
