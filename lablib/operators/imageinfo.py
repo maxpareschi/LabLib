@@ -2,6 +2,7 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 import subprocess
+from typing import List
 
 from lablib.operators import BaseOperator
 import lablib.utils as llu
@@ -43,7 +44,7 @@ class ImageInfo(BaseOperator):
         # self.read_image_info(path)
 
     @classmethod
-    def scan(cls, directory: str | Path) -> list[ImageInfo]:
+    def scan(cls, directory: str | Path) -> List[ImageInfo]:
         """Scan a directory for image files and return a list of ImageInfo objects."""
         if not isinstance(directory, Path):
             directory = Path(directory)
