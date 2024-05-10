@@ -31,7 +31,7 @@ Please see the sample `tests/test_run.py` for an usage example.
 Please see `tests/test_run.py` globals for dependent binary locations.
 
 - `poetry install`
-- `poetry run pytest -s`
+- `poetry run pytest`
 
 
 ### Features (Planned and Done)
