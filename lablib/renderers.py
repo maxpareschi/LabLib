@@ -1,8 +1,9 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import subprocess
 import shutil
+from typing import List
 
 from pathlib import Path
 
@@ -23,7 +24,7 @@ class DefaultRenderer:
     def __post_init__(self) -> None:
         self._debug: bool = False
         self._threads: int = 4
-        self._command: list = []
+        self._command: List[str] = []
         if not self.name:
             self.name = "lablib_render"
     
@@ -33,12 +34,10 @@ class DefaultRenderer:
             shutil.rmtree(render_staging_dir.as_posix(), ignore_errors = True)
             render_staging_dir.mkdir(parents = True, exist_ok = True)
             
-    def set_color_processor(self,
-                            processor: ColorProcessor) -> None:
+    def set_color_processor(self, processor: ColorProcessor) -> None:
         self.color_proc = processor
 
-    def set_repo_processor(self,
-                           processor: RepoProcessor) -> None:
+    def set_repo_processor(self, processor: RepoProcessor) -> None:
         self.repo_proc = processor
 
     def set_debug(self, debug: bool) -> None:
@@ -53,7 +52,7 @@ class DefaultRenderer:
     def set_threads(self, threads: int) -> None:
         self._threads = threads
 
-    def get_oiiotool_cmd(self) -> list:
+    def get_oiiotool_cmd(self) -> List[str]:
         return self._command
 
     def render(self) -> SequenceInfo:
@@ -62,15 +61,19 @@ class DefaultRenderer:
         self.setup_staging_dir()
         cmd = [
             "oiiotool",
-            "-i", Path(self.source_sequence.path,
-                       self.source_sequence.hash_string).resolve().as_posix(),
+            "-i", Path(
+                self.source_sequence.path,
+                self.source_sequence.hash_string
+            ).resolve().as_posix(),
             "--threads", str(self._threads),
         ]
         if self.repo_proc:
             cmd.extend(self.repo_proc.get_oiiotool_cmd())
+
         if self.color_proc:
             self.color_proc.create_config()
             cmd.extend(self.color_proc.get_oiiotool_cmd())
+
         cmd.extend([
             "--ch", "R,G,B"
         ])
@@ -78,6 +81,7 @@ class DefaultRenderer:
             cmd.extend([
                 "--debug", "-v"
             ])
+
         if self.format:
             dest_path = "{}{}{}".format(
                 self.source_sequence.head,
@@ -86,6 +90,7 @@ class DefaultRenderer:
             )
         else:
             dest_path = self.source_sequence.hash_string
+
         cmd.extend([
             "-o", Path(
                 self.staging_dir,
@@ -103,14 +108,16 @@ class DefaultRenderer:
             Path(self.staging_dir, self.name).resolve().as_posix()
         )
 
-    def render_repo_ffmpeg(self,
-                           src: str,
-                           dst: str,
-                           cornerpin: list,
-                           in_args: list = None,
-                           out_args: list = None,
-                           resolution: str = None,
-                           debug: str = "error") -> SequenceInfo:
+    def render_repo_ffmpeg(
+        self,
+        src: str,
+        dst: str,
+        cornerpin: List,
+        in_args: List = None,
+        out_args: List = None,
+        resolution: str = None,
+        debug: str = "error"
+    ) -> SequenceInfo:
         if not resolution:
             resolution = "1920x1080"
         width, height = resolution.split("x")
@@ -148,9 +155,9 @@ class DefaultSlateRenderer:
     dest: str = None
 
     def __post_init__(self) -> None:
-        self._thumbs: list = None
+        self._thumbs: List = None
         self._debug: bool = False
-        self._command: list = []
+        self._command: List = []
         if self.source_sequence:
             self.set_source_sequence(self.source_sequence)
             self.slate_proc.source_files = self.source_sequence.frames
@@ -166,10 +173,14 @@ class DefaultSlateRenderer:
 
     def set_source_sequence(self, source_sequence: SequenceInfo) -> None:
         self.source_sequence = source_sequence
-        head, frame, tail = source_sequence._get_file_splits(source_sequence.frames[0])
-        self.dest = "{}{}{}".format(head,
-                                    str(int(frame) - 1).zfill(source_sequence.padding),
-                                    tail)
+        head, frame, tail = source_sequence._get_file_splits(
+            source_sequence.frames[0]
+        )
+        self.dest = "{}{}{}".format(
+            head,
+            str(int(frame) - 1).zfill(source_sequence.padding),
+            tail
+        )
 
     def set_destination(self, dest: str) -> None:
         self.dest = dest
@@ -177,15 +188,15 @@ class DefaultSlateRenderer:
     def render(self) -> None:
         first_frame = read_image_info(self.source_sequence.frames[0])
         timecode = offset_timecode(
-            tc = first_frame.timecode,
-            frame_offset = -1,
-            fps = first_frame.fps
+            tc=first_frame.timecode,
+            frame_offset=-1,
+            fps=first_frame.fps
         )
         self.slate_proc.create_base_slate()
         if not self.slate_proc:
             raise ValueError("Missing valid SlateProcessor!")
         cmd = ["oiiotool"]
-        cmd.extend( self.slate_proc.get_oiiotool_cmd())
+        cmd.extend(self.slate_proc.get_oiiotool_cmd())
         cmd.extend([
             "--ch", "R,G,B",
             "--attrib:type=timecode",
