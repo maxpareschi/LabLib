@@ -42,6 +42,21 @@ class ImageInfo(BaseOperator):
         self.update_from_path()
         # self.read_image_info(path)
 
+    @classmethod
+    def scan(cls, directory: str | Path) -> list[ImageInfo]:
+        """Scan a directory for image files and return a list of ImageInfo objects."""
+        if not isinstance(directory, Path):
+            directory = Path(directory)
+
+        if not directory.is_dir():
+            raise NotImplementedError(f"{directory} is not a directory")
+
+        files = [item for item in directory.iterdir() if item.is_file()]
+        if not files:
+            raise FileNotFoundError(f"No image files found in {directory}")
+
+        return [cls(file) for file in files]
+
     def update_from_path(self, force_ffprobe=True):
         """Update ImageInfo from a given file path.
         NOTE: force_ffprobe overrides iinfo values with ffprobe values.
