@@ -71,7 +71,28 @@ class ImageInfo(BaseOperator):
                 continue
             self[k] = v
             if ffprobe_res.get(k) and force_ffprobe:
-                self[k] = ffprobe_res[k]
+
+    @property
+    def rational_time(self) -> opentime.RationalTime:
+        if not all([self.timecode, self.fps]):
+            # NOTE: i should use otio here
+            raise Exception("no timecode and fps found")
+
+        result = opentime.from_timecode(self.timecode, self.fps)
+        return result
+
+    @property
+    def frame_no(self) -> int:
+        if not self.filename:
+            raise Exception("needs filename for querying frame number")
+        matches = re.findall(r"\.(\d+)\.", self.filename)
+        if len(matches) > 1:
+            raise ValueError("can't handle multiple found frame numbers")
+
+        result = int(matches[0])
+
+        self.log.debug(f"frame_no = {result}")
+        return result
 
     def read_image_info(
         self,
