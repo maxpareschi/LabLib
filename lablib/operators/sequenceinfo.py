@@ -9,8 +9,9 @@ from lablib.operators import BaseOperator, ImageInfo
 
 
 class SequenceInfo(BaseOperator):
-    path: str = None
-    frames: List[str] = None
+    filepath: str = None
+    filename: str = None
+    frames: List[ImageInfo] = None
     frame_start: int = None
     frame_end: int = None
     head: str = None
@@ -19,9 +20,10 @@ class SequenceInfo(BaseOperator):
     hash_string: str = None
     format_string: str = None
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    def __init__(self, name, imageinfos, **kwargs):
+        super().__init__(**kwargs)
+        self.frames = imageinfos
+        self.filename = name
         self.update_from_path(self.path)
 
     def _get_file_splits(self, file_name: str) -> None:
@@ -86,10 +88,11 @@ class SequenceInfo(BaseOperator):
                 cls.log.warning(f"{item.suffix} not in (.exr)")
                 continue
 
-            if re.findall(r"\.(\d+)", item.stem):
-                name = item.stem.split(".")[0]
-            else:
-                name = item.stem
+            _parts = item.stem.split(".")
+            if len(_parts) > 2:
+                cls.log.warning(f"{_parts = }")
+                continue
+            name = Path(item.parent, _parts[0])
             cls.log.info(f"{name = }")
 
             if name not in files_map.keys():
@@ -97,12 +100,14 @@ class SequenceInfo(BaseOperator):
             files_map[name].append(ImageInfo(item))
 
         for seq_name, seq_files in files_map.items():
+            return cls(name, seq_files)
             cls.log.info(f"{seq_name = }")
             cls.log.info(f"{seq_files = }")
             cls.log.info(f"{len(seq_files) = }")
 
-    # def update_from_path(self, path: Path) -> None:
-    #     if not path.is_dir():
-    #         raise NotImplementedError(
-    #             "SequenceInfo from a file is not yet implemented."
-    #         )
+    def update_from_path(self, path: Path) -> None:
+        pass
+
+    @property
+    def filename(self) -> str:
+        return f"{self.filename} {self.frame_start}-{self.frame_end}"
