@@ -43,6 +43,12 @@ class ImageInfo(BaseOperator):
         self.update_from_path()
         # self.read_image_info(path)
 
+    def __gt__(self, other: ImageInfo) -> bool:
+        return self.frame_no > other.frame_no
+
+    def __lt__(self, other: ImageInfo) -> bool:
+        return self.frame_no < other.frame_no
+
     @classmethod
     def scan(cls, directory: str | Path) -> List[ImageInfo]:
         """Scan a directory for image files and return a list of ImageInfo objects."""
