@@ -14,6 +14,7 @@ import lablib.utils as llu
 class ImageInfo(BaseOperator):
     """ImageInfo class for reading image metadata."""
 
+    # NOTE: should we user @property decorator for all class and instance attributes?
     filepath: Path = None
     filename: str = None
     origin_x: int = 0
@@ -78,8 +79,10 @@ class ImageInfo(BaseOperator):
         for k, v in iinfo_res.items():
             if not v:
                 continue
-            self[k] = v
             if ffprobe_res.get(k) and force_ffprobe:
+                v = ffprobe_res[k]
+            self.log.debug(f"Setting {k}={v}")
+            self[k] = v
 
     @property
     def rational_time(self) -> opentime.RationalTime:
