@@ -24,7 +24,7 @@ class SequenceInfo(BaseOperator):
         super().__init__(**kwargs)
         self.frames = imageinfos
         self.filename = name
-        self.update_from_path(self.path)
+        self.update_from_path(self.filepath)
 
     def _get_file_splits(self, file_name: str) -> None:
         head, ext = os.path.splitext(file_name)
@@ -92,22 +92,15 @@ class SequenceInfo(BaseOperator):
             if len(_parts) > 2:
                 cls.log.warning(f"{_parts = }")
                 continue
-            name = Path(item.parent, _parts[0])
-            cls.log.info(f"{name = }")
+            seq_key = Path(item.parent, _parts[0])
+            cls.log.info(f"{seq_key = }")
 
-            if name not in files_map.keys():
-                files_map[name] = []
-            files_map[name].append(ImageInfo(item))
+            if seq_key not in files_map.keys():
+                files_map[seq_key] = []
+            files_map[seq_key].append(ImageInfo(item))
 
         for seq_name, seq_files in files_map.items():
-            return cls(name, seq_files)
-            cls.log.info(f"{seq_name = }")
-            cls.log.info(f"{seq_files = }")
-            cls.log.info(f"{len(seq_files) = }")
+            return cls(seq_key.name, seq_files)
 
     def update_from_path(self, path: Path) -> None:
         pass
-
-    @property
-    def filename(self) -> str:
-        return f"{self.filename} {self.frame_start}-{self.frame_end}"
