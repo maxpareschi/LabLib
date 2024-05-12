@@ -34,7 +34,7 @@ def test_single_frame_sequence():
     assert seq_info.start_frame == 1001
     assert seq_info.end_frame == 1001
     assert seq_info.padding == 4
-    assert seq_info.no_frames_missing
+    assert not seq_info.frames_missing
 
 
 def test_SequenceInfo_missing_frames():
@@ -44,4 +44,5 @@ def test_SequenceInfo_missing_frames():
     assert seq_info.path == path
     assert seq_info.start_frame == 1001
     assert seq_info.end_frame == 1003
-    assert not seq_info.no_frames_missing
+    assert seq_info.frames_missing
+    # TODO: which missing frames

@@ -133,8 +133,8 @@ class SequenceInfo(BaseOperator):
         return result
 
     @property
-    def no_frames_missing(self) -> bool:
+    def frames_missing(self) -> bool:
         start = min(self.frames).frame_number
         end = max(self.frames).frame_number
         expected: int = len(range(start, end)) + 1
-        return expected == len(self.frames)
+        return not expected == len(self.frames)
