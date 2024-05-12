@@ -3,28 +3,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
-from typing import List
+from typing import Dict, List, Optional
 
 from lablib.operators import BaseOperator, ImageInfo
 
 
 class SequenceInfo(BaseOperator):
-    filepath: str = None
-    filename: str = None
-    frames: List[ImageInfo] = None
-    frame_start: int = None
-    frame_end: int = None
-    head: str = None
-    tail: str = None
-    padding: int = 0
-    hash_string: str = None
-    format_string: str = None
-
-    def __init__(self, name, imageinfos, **kwargs):
-        super().__init__(**kwargs)
-        self.frames = imageinfos
-        self.filename = name
-        self.update_from_path(self.filepath)
+    def __init__(self, path: Path, imageinfos: List[ImageInfo]):
+        super().__init__(path, imageinfos)
+        # self.imageinfos = imageinfos
+        # self.update(imageinfos)
 
     def _get_file_splits(self, file_name: str) -> None:
         head, ext = os.path.splitext(file_name)
@@ -80,7 +68,7 @@ class SequenceInfo(BaseOperator):
         if not directory.is_dir():
             raise NotImplementedError(f"{directory} is no directory")
 
-        files_map = {}
+        files_map: Dict[Path, ImageInfo] = {}
         for item in directory.iterdir():
             if not item.is_file():
                 continue
@@ -99,8 +87,74 @@ class SequenceInfo(BaseOperator):
                 files_map[seq_key] = []
             files_map[seq_key].append(ImageInfo(item))
 
-        for seq_name, seq_files in files_map.items():
-            return cls(seq_key.name, seq_files)
+        for seq_files in files_map.values():
+            return cls(path=seq_key.parent, imageinfos=seq_files)
 
-    def update_from_path(self, path: Path) -> None:
-        pass
+    def update(self, imageinfos: Optional[List[ImageInfo]]):
+        if imageinfos:
+            self.log.debug(f"Updating from new frames: {imageinfos}")
+            self.imageinfos = imageinfos
+        # self.start_frame = min(self.frames)
+        # self.end_frame = max(self.frames)
+
+        # check sequence consistency?
+        self.log.info("check consistency")
+        # if not self.imageinfos:
+        #     self.imageinfos = imageinfos
+        #     self.log.info(f"SETT {self.imageinfos}")
+        # pass
+        # ii = ImageInfo(path, frames: [ImageInfo])
+        # self.log.info(f"HELOOOOOO {imageinfos}")
+        # self.log.info(f"HELOOOOOO self {self.imageinfos}")
+
+        # update
+
+    @property
+    def imageinfos(self) -> List[int]:
+        return self._imageinfos
+
+    @imageinfos.setter
+    def imageinfos(self, value: List[ImageInfo]):
+        self._imageinfos = value
+
+    @property
+    def frames(self) -> List[int]:
+        return self.imageinfos
+
+    @property
+    def start_frame(self) -> int:
+        return min(self.frames).frame_number
+
+    @property
+    def end_frame(self) -> int:
+        return max(self.frames).frame_number
+
+    @property
+    def hash_string(self) -> str:
+        frame: ImageInfo = min(self.frames)
+        ext: str = frame.extension
+        splits = frame.name.split(".")
+        basename = splits[0]
+        frame_number: int = frame.frame_number
+
+        result = f"{basename}.{frame_number}#{len(self.frames)}{ext}"
+        self.log.info(f"{result = }")
+        return result
+
+    @property
+    def format_str(self) -> str:
+        frame: ImageInfo = min(self.frames)
+        ext: str = frame.extension
+        splits = frame.name.split(".")
+        basename = splits[0]
+        frame_number: int = frame.frame_number
+
+        result = f"{basename}.%0{len(self.frames)}d{ext}"
+        self.log.info(f"{result = }")
+        return result
+
+    @property
+    def padding(self) -> int:
+        frame = min(self.frames)
+        result = len(str(frame.frame_number))
+        return result
