@@ -41,7 +41,5 @@ def test_SequenceInfo_missing_frames():
     seq_info = SequenceInfo.scan(path)
     log.info(f"{seq_info = }")
     assert seq_info.path == path
-    # assert seq_info.version == 1
     assert seq_info.start_frame == 1001
     assert seq_info.end_frame == 1003
-    # assert seq_info.hash_string == "v002.1001#exr"

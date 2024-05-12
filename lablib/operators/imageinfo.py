@@ -175,7 +175,6 @@ class ImageInfo(BaseOperator):
 
         result = int(matches[0])
 
-        self.log.debug(f"frame_no = {result}")
         return result
 
     @property
@@ -184,10 +183,6 @@ class ImageInfo(BaseOperator):
 
     @property
     def name(self) -> str:
-        # result = self.filename.split(".")[0]
-        # self.log.info(f"{result = }")
-        # return result
-
         return f"{self.path.stem}{self.path.suffix}"
 
     def read_image_info(

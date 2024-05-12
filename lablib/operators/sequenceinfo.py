@@ -61,7 +61,7 @@ class SequenceInfo(BaseOperator):
 
     @classmethod
     def scan(cls, directory: str | Path) -> List[SequenceInfo]:
-        cls.log.info(f"{directory = }")
+        cls.log.info(f"Scanning {directory}")
         if not isinstance(directory, Path):
             directory = Path(directory)
 
@@ -81,7 +81,6 @@ class SequenceInfo(BaseOperator):
                 cls.log.warning(f"{_parts = }")
                 continue
             seq_key = Path(item.parent, _parts[0])
-            cls.log.info(f"{seq_key = }")
 
             if seq_key not in files_map.keys():
                 files_map[seq_key] = []
@@ -94,20 +93,8 @@ class SequenceInfo(BaseOperator):
         if imageinfos:
             self.log.debug(f"Updating from new frames: {imageinfos}")
             self.imageinfos = imageinfos
-        # self.start_frame = min(self.frames)
-        # self.end_frame = max(self.frames)
 
-        # check sequence consistency?
-        self.log.info("check consistency")
-        # if not self.imageinfos:
-        #     self.imageinfos = imageinfos
-        #     self.log.info(f"SETT {self.imageinfos}")
-        # pass
-        # ii = ImageInfo(path, frames: [ImageInfo])
-        # self.log.info(f"HELOOOOOO {imageinfos}")
-        # self.log.info(f"HELOOOOOO self {self.imageinfos}")
-
-        # update
+        # TODO: check for missing frames
 
     @property
     def imageinfos(self) -> List[int]:
@@ -133,24 +120,10 @@ class SequenceInfo(BaseOperator):
     def hash_string(self) -> str:
         frame: ImageInfo = min(self.frames)
         ext: str = frame.extension
-        splits = frame.name.split(".")
-        basename = splits[0]
+        basename = frame.name.split(".")[0]
         frame_number: int = frame.frame_number
 
         result = f"{basename}.{frame_number}#{len(self.frames)}{ext}"
-        self.log.info(f"{result = }")
-        return result
-
-    @property
-    def format_str(self) -> str:
-        frame: ImageInfo = min(self.frames)
-        ext: str = frame.extension
-        splits = frame.name.split(".")
-        basename = splits[0]
-        frame_number: int = frame.frame_number
-
-        result = f"{basename}.%0{len(self.frames)}d{ext}"
-        self.log.info(f"{result = }")
         return result
 
     @property
