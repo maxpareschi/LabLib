@@ -138,3 +138,19 @@ class SequenceInfo(BaseOperator):
         end = max(self.frames).frame_number
         expected: int = len(range(start, end)) + 1
         return not expected == len(self.frames)
+
+    @property
+    def width(self) -> int:
+        return self.imageinfos[0].width
+
+    @property
+    def display_width(self) -> int:
+        return self.imageinfos[0].display_width
+
+    @property
+    def height(self) -> int:
+        return self.imageinfos[0].height
+
+    @property
+    def display_height(self) -> int:
+        return self.imageinfos[0].display_height

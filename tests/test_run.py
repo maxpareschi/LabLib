@@ -3,6 +3,7 @@ import json
 import pytest
 
 # from lablib import operators, processors, renderers, utils
+from lablib.operators import SequenceInfo
 
 # System Constants
 FFMPEG_PATH = "vendor/bin/ffmpeg/windows/bin"
@@ -34,11 +35,12 @@ def test_full():
         working_data = json.loads(f.read())
 
     # Setup SequenceInfo operator
-    main_seq = operators.SequenceInfo().compute_longest(SOURCE_DIR)
+    # main_seq = operators.SequenceInfo().compute_longest(SOURCE_DIR)
+    main_seq = SequenceInfo.scan(SOURCE_DIR)[0]
     print(f"{main_seq = }")
 
-    # Read image info from first image in sequence
-    main_seq_info = utils.read_image_info(main_seq.frames[0])
+    # # Read image info from first image in sequence
+    # main_seq_info = utils.read_image_info(main_seq.frames[0])
 
     # Compute Effects file from AYON
     epr = processors.EffectsFileProcessor(EFFECT_PATH)
@@ -56,8 +58,8 @@ def test_full():
     # Compute repo transformations
     rpr = processors.RepoProcessor(
         operators=epr.repo_operators,
-        source_width=main_seq_info.display_width,
-        source_height=main_seq_info.display_height,
+        source_width=main_seq.display_width,
+        source_height=main_seq.display_height,
         dest_width=OUTPUT_WIDTH,
         dest_height=OUTPUT_HEIGHT,
     )
