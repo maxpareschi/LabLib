@@ -11,64 +11,33 @@ from lablib.operators import BaseOperator
 import lablib.utils as llu
 
 
+DEFAULTS = {
+    "width": 1920,
+    "height": 1080,
+    "channels": 3,
+    "fps": 24.0,
+    "par": 1.0,
+    "timecode": "00:00:00:00",
+    "origin_x": 0,
+    "origin_y": 0,
+    "display_width": 1920,
+    "display_height": 1080,
+}
+
+
 class ImageInfo(BaseOperator):
     """ImageInfo class for reading image metadata."""
 
-    # NOTE: should we user @property decorator for all class and instance attributes?
-    filepath: Path = None
-    filename: str = None
-    origin_x: int = 0
-    origin_y: int = 0
-    width: int = 1920
-    height: int = 1080
-    display_width: int = width
-    display_height: int = height
-    channels: int = 3
-    fps: float = 24.0
-    par: float = 1.0
-    timecode: str = None  # "01:00:00:01"
-
-    def __init__(self, path: str, **kwargs):
-        super().__init__(path, **kwargs)
-
-        # handle path
-        if not path:
-            raise ValueError("Path is required.")
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-        if path.suffix not in (".exr"):
-            raise ValueError(f"Invalid file type: {path}")
-
-        self.filepath = path
-        self.filename = path.name
-
-        self.log.info(f"Reading image info from {path}")
-        self.update_from_path()
-        # self.read_image_info(path)
+    def __init__(self, path: Path):
+        super().__init__(path)
 
     def __gt__(self, other: ImageInfo) -> bool:
-        return self.frame_no > other.frame_no
+        return self.frame_number > other.frame_number
 
     def __lt__(self, other: ImageInfo) -> bool:
-        return self.frame_no < other.frame_no
+        return self.frame_number < other.frame_number
 
-    @classmethod
-    def scan(cls, directory: str | Path) -> List[ImageInfo]:
-        """Scan a directory for image files and return a list of ImageInfo objects."""
-        if not isinstance(directory, Path):
-            directory = Path(directory)
-
-        if not directory.is_dir():
-            raise NotImplementedError(f"{directory} is not a directory")
-
-        files = [item for item in directory.iterdir() if item.is_file()]
-        if not files:
-            raise FileNotFoundError(f"No image files found in {directory}")
-
-        return [cls(file) for file in files]
-
-    def update_from_path(self, force_ffprobe=True):
+    def update(self, force_ffprobe=True):
         """Update ImageInfo from a given file path.
         NOTE: force_ffprobe overrides iinfo values with ffprobe values.
               It's used since they report different framerates for testing exr files.
@@ -81,8 +50,111 @@ class ImageInfo(BaseOperator):
                 continue
             if ffprobe_res.get(k) and force_ffprobe:
                 v = ffprobe_res[k]
-            self.log.debug(f"Setting {k}={v}")
             self[k] = v
+
+    @property
+    def width(self) -> int:
+        if not hasattr(self, "_width"):
+            return DEFAULTS["width"]
+        return self._width
+
+    @width.setter
+    def width(self, value: int):
+        self._width = value
+
+    @property
+    def height(self) -> int:
+        if not hasattr(self, "_height"):
+            return DEFAULTS["height"]
+        return self._height
+
+    @height.setter
+    def height(self, value: int):
+        self._height = value
+
+    @property
+    def display_height(self) -> int:
+        if not hasattr(self, "_display_height"):
+            return self.height  # default to initial height
+        return self._display_height
+
+    @display_height.setter
+    def display_height(self, value: int):
+        self._display_height = value
+
+    @property
+    def display_width(self) -> int:
+        if not hasattr(self, "_display_width"):
+            return self.width  # default to initial width
+        return self._display_width
+
+    @display_width.setter
+    def display_width(self, value: int):
+        self._display_width = value
+
+    @property
+    def channels(self) -> int:
+        if not hasattr(self, "_channels"):
+            return DEFAULTS["channels"]
+        return self._channels
+
+    @channels.setter
+    def channels(self, value: int):
+        self._channels = value
+
+    @property
+    def fps(self) -> int:
+        if not hasattr(self, "_fps"):
+            return DEFAULTS["fps"]
+        return self._fps
+
+    @fps.setter
+    def fps(self, value: int):
+        self._fps = value
+
+    @property
+    def par(self) -> int:
+        if not hasattr(self, "_par"):
+            return DEFAULTS["par"]
+        return self._par
+
+    @par.setter
+    def par(self, value: int):
+        self._par = value
+
+    @property
+    def timecode(self) -> str:
+        if not hasattr(self, "_timecode"):
+            return DEFAULTS["timecode"]
+        return self._timecode
+
+    @timecode.setter
+    def timecode(self, value: int):
+        self._timecode = value
+
+    @property
+    def origin_x(self) -> int:
+        if not hasattr(self, "_origin_x"):
+            return DEFAULTS["origin_x"]
+        return self._origin_x
+
+    @origin_x.setter
+    def origin_x(self, value: int):
+        self._origin_x = value
+
+    @property
+    def origin_y(self) -> int:
+        if not hasattr(self, "_origin_y"):
+            return DEFAULTS["origin_y"]
+        return self._origin_y
+
+    @origin_y.setter
+    def origin_y(self, value: int):
+        self._origin_y = value
+
+    @property
+    def filename(self) -> str:
+        return self.path.name
 
     @property
     def rational_time(self) -> opentime.RationalTime:
@@ -94,7 +166,7 @@ class ImageInfo(BaseOperator):
         return result
 
     @property
-    def frame_no(self) -> int:
+    def frame_number(self) -> int:
         if not self.filename:
             raise Exception("needs filename for querying frame number")
         matches = re.findall(r"\.(\d+)\.", self.filename)
@@ -105,6 +177,18 @@ class ImageInfo(BaseOperator):
 
         self.log.debug(f"frame_no = {result}")
         return result
+
+    @property
+    def extension(self) -> str:
+        return self.path.suffix
+
+    @property
+    def name(self) -> str:
+        # result = self.filename.split(".")[0]
+        # self.log.info(f"{result = }")
+        # return result
+
+        return f"{self.path.stem}{self.path.suffix}"
 
     def read_image_info(
         self,
