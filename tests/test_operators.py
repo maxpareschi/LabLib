@@ -2,6 +2,8 @@ import pytest
 import logging
 from pathlib import Path
 
+from opentimelineio.opentime import RationalTime
+
 from lablib.operators import ImageInfo, SequenceInfo
 
 log = logging.getLogger(__name__)
@@ -23,6 +25,7 @@ def test_ImageInfo(path: str):
     assert image_info.filepath == path
     assert image_info.filename == path.name
     assert image_info.timecode == "02:10:04:17"
+    assert image_info.rational_time == RationalTime(195117, 25)
 
 
 def test_single_frame_sequence():
