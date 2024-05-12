@@ -60,4 +60,8 @@ def test_Effect_FileTransform():
         "resources/public/effectPlateMain/v000/resources/BLD_Ext_D_2-Sin709.cube"
     )
     lut = LUTFileTransform(lut_file)
+    assert lut.filepath == lut_file
+    assert lut.direction == "TRANSFORM_DIR_FORWARD"
+    assert lut.interpolation == "INTERP_DEFAULT"
+
     log.info(f"{lut = }")
