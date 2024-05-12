@@ -1,6 +1,18 @@
 from dataclasses import dataclass, field
 from typing import List
 
+import PyOpenColorIO as ocio
+
+from lablib.operators import BaseOperator
+
+
+class LUTFileTransform(BaseOperator):
+    def __init__(self, path: str):
+        super().__init__(path)
+
+    def update(self):
+        pass
+
 
 @dataclass
 class RepoTransform:

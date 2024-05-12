@@ -4,7 +4,11 @@ from pathlib import Path
 
 from opentimelineio.opentime import RationalTime
 
-from lablib.operators import ImageInfo, SequenceInfo
+from lablib.operators import (
+    ImageInfo,
+    SequenceInfo,
+    LUTFileTransform,
+)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -49,3 +53,11 @@ def test_SequenceInfo_missing_frames():
     assert seq_info.end_frame == 1003
     assert seq_info.frames_missing
     # TODO: which missing frames
+
+
+def test_Effect_FileTransform():
+    lut_file = Path(
+        "resources/public/effectPlateMain/v000/resources/BLD_Ext_D_2-Sin709.cube"
+    )
+    lut = LUTFileTransform(lut_file)
+    log.info(f"{lut = }")
