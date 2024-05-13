@@ -1,13 +1,9 @@
-from . import (
-    operators,
-    processors,
-    renderers,
-    utils
-)
+from lablib import utils
+from lablib.operators import BaseOperator, ImageInfo, SequenceInfo
 
 __all__ = [
-    "operators",
-    "processors",
-    "renderers",
-    "utils"
+    "utils",
+    "BaseOperator",
+    "ImageInfo",
+    "SequenceInfo",
 ]

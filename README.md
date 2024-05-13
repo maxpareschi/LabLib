@@ -23,9 +23,16 @@ The core functionality relies on using **Processors** and **Operators** to compu
 
 **Renderers** take care of returning the fully formed commanline command and executing it.
 
-Please see the sample `test_run.py` for an usage example.
+Please see the sample `tests/test_run.py` for an usage example.
 
 ---
+
+## Testing
+Please see `tests/test_run.py` globals for dependent binary locations.
+
+- `poetry install`
+- `poetry run pytest`
+
 
 ### Features (Planned and Done)
 
